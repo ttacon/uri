@@ -3,6 +3,8 @@ package uri
 import (
 	"reflect"
 	"testing"
+
+	"github.com/ttacon/pretty"
 )
 
 func Test_rawURIParse(t *testing.T) {
@@ -14,7 +16,7 @@ func Test_rawURIParse(t *testing.T) {
 		{
 			"foo://example.com:8042/over/there?name=ferret#nose",
 			&uri{"foo", "//example.com:8042/over/there", "name=ferret", "nose",
-				authorityInfo{
+				&authorityInfo{
 					"",
 					"example.com",
 					"8042",
@@ -26,7 +28,7 @@ func Test_rawURIParse(t *testing.T) {
 		{
 			"http://httpbin.org/get?utf8=\xe2\x98\x83",
 			&uri{"http", "//httpbin.org/get", "utf8=\xe2\x98\x83", "",
-				authorityInfo{
+				&authorityInfo{
 					"",
 					"httpbin.org",
 					"",
@@ -38,7 +40,7 @@ func Test_rawURIParse(t *testing.T) {
 		{
 			"mailto:user@domain.com",
 			&uri{"mailto", "user@domain.com", "", "",
-				authorityInfo{
+				&authorityInfo{
 					"user",
 					"domain.com",
 					"",
@@ -50,12 +52,19 @@ func Test_rawURIParse(t *testing.T) {
 		{
 			"ssh://user@git.openstack.org:29418/openstack/keystone.git",
 			&uri{"ssh", "//user@git.openstack.org:29418/openstack/keystone.git", "", "",
-				authorityInfo{
+				&authorityInfo{
 					"user",
 					"git.openstack.org",
 					"29418",
 					"/openstack/keystone.git",
 				},
+			},
+			nil,
+		},
+		{
+			"https://willo.io/#yolo",
+			&uri{"https", "//willo.io/", "", "yolo",
+				&authorityInfo{"", "willo.io", "", ""},
 			},
 			nil,
 		},
@@ -67,7 +76,8 @@ func Test_rawURIParse(t *testing.T) {
 			t.Errorf("got back unexpected err: %v != %v", err, test.err)
 			continue
 		} else if !reflect.DeepEqual(got, test.uri) {
-			t.Errorf("got back unexpected uri: %v != %v", got, test.uri)
+			t.Errorf("got back unexpected (raw: %s), uri: %v != %v",
+				test.uriRaw, pretty.Sprintf("%#v", got), pretty.Sprintf("%#v", test.uri))
 		}
 	}
 }

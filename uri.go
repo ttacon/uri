@@ -26,47 +26,76 @@ var (
 )
 
 func ParseURI(raw string) (URI, error) {
-	schemeEnd := strings.Index(raw, colon)
+	var (
+		schemeEnd   = strings.Index(raw, colon)
+		hierPartEnd = strings.Index(raw, question)
+		queryEnd    = strings.Index(raw, fragment)
+
+		curr int
+	)
+
 	if schemeEnd < 1 {
 		return nil, ErrNoSchemeFound
-	} else if schemeEnd == len(raw) {
+	} else if schemeEnd+1 == len(raw) {
 		return nil, ErrInvalidURI
 	}
 
-	scheme := raw[:schemeEnd]
-	raw = raw[schemeEnd+1:]
+	scheme := raw[curr:schemeEnd]
+	curr = schemeEnd + 1
 
-	hierPartEnd := strings.Index(raw, question)
-	if hierPartEnd < 0 || hierPartEnd == len(raw) {
+	if hierPartEnd == len(raw) || (hierPartEnd < 0 && queryEnd < 0) {
 		return &uri{
 			scheme:    scheme,
-			hierPart:  raw, // since it's all that's left
-			authority: parseAuthority(raw),
+			hierPart:  raw[curr:], // since it's all that's left
+			authority: parseAuthority(raw[curr:]),
 		}, nil
 	}
 
-	hierPart := raw[:hierPartEnd]
+	var (
+		hierPart, query, fragment string
+		authorityInfo             *authorityInfo
+	)
+	if hierPartEnd > 0 {
+		hierPart = raw[curr:hierPartEnd]
+		authorityInfo = parseAuthority(hierPart)
+		if hierPartEnd+1 < len(raw) {
+			query = raw[hierPartEnd+1:]
+		}
+		curr = hierPartEnd + 1
+	}
 
-	// parse authority
-	authorityInfo := parseAuthority(hierPart)
-
-	raw = raw[hierPartEnd+1:]
-
-	queryEnd := strings.Index(raw, fragment)
-	if queryEnd < 0 || queryEnd == len(raw) {
+	if queryEnd == len(raw) {
+		if hierPartEnd < 0 {
+			hierPart = raw[curr:queryEnd]
+			authorityInfo = parseAuthority(hierPart)
+		} else {
+			query = raw[curr:hierPartEnd]
+			hierPart = raw[hierPartEnd+1 : queryEnd]
+			authorityInfo = parseAuthority(hierPart)
+		}
 		return &uri{
 			scheme:    scheme,
 			hierPart:  hierPart,
-			query:     raw,
 			authority: authorityInfo,
+			query:     query,
 		}, nil
+	} else if queryEnd > 0 {
+		if hierPartEnd < 0 {
+			hierPart = raw[curr:queryEnd]
+			authorityInfo = parseAuthority(hierPart)
+		} else {
+			query = raw[curr:queryEnd]
+		}
+		if queryEnd+1 < len(raw) {
+			fragment = raw[queryEnd+1:]
+		}
 	}
 
 	return &uri{
 		scheme:    scheme,
 		hierPart:  hierPart,
-		query:     raw[:queryEnd],
-		fragment:  raw[queryEnd+1:],
+		query:     query,
+		fragment:  fragment,
 		authority: authorityInfo,
 	}, nil
 }
@@ -79,15 +108,15 @@ type uri struct {
 	fragment string
 
 	// parsed components
-	authority authorityInfo
+	authority *authorityInfo
 }
 
 func (u *uri) Scheme() string {
-	return ""
+	return u.scheme
 }
 
 func (u *uri) Authority() Authority {
-	return nil
+	return u.authority
 }
 
 func (u *uri) QueryPieces() map[string]string {
@@ -95,7 +124,7 @@ func (u *uri) QueryPieces() map[string]string {
 }
 
 func (u *uri) Fragment() string {
-	return ""
+	return u.fragment
 }
 
 // errors
@@ -111,7 +140,11 @@ type authorityInfo struct {
 	path     string
 }
 
-func parseAuthority(hier string) authorityInfo {
+func (a authorityInfo) UserInfo() string { return a.userinfo }
+func (a authorityInfo) Host() string     { return a.host }
+func (a authorityInfo) Port() string     { return a.port }
+
+func parseAuthority(hier string) *authorityInfo {
 	// as per RFC 3986 Section 3.6
 	var userinfo, host, port, path string
 
@@ -144,10 +177,25 @@ func parseAuthority(hier string) authorityInfo {
 		host = host[:colon]
 	}
 
-	return authorityInfo{
+	return &authorityInfo{
 		userinfo: userinfo,
 		host:     host,
 		port:     port,
 		path:     path,
 	}
+}
+
+// Builder time!
+
+type URIBuilder interface {
+	SetScheme(scheme string)
+	SetUserInfo(userinfo string)
+	SetHost(host string)
+	SetPort(port string)
+	SetPath(path string)
+	SetQuery(query string)
+	SetFragment(fragment string)
+
+	Build() string
+	String() string
 }
