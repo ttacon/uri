@@ -1,6 +1,7 @@
 package uri
 
 import (
+	"bytes"
 	"errors"
 	"strings"
 )
@@ -11,12 +12,16 @@ type URI interface {
 
 	QueryPieces() map[string]string
 	Fragment() string
+
+	Builder() URIBuilder
+	String() string
 }
 
 type Authority interface {
 	UserInfo() string
 	Host() string
 	Port() string
+	String() string
 }
 
 var (
@@ -134,6 +139,7 @@ var (
 )
 
 type authorityInfo struct {
+	prefix   string
 	userinfo string
 	host     string
 	port     string
@@ -143,17 +149,43 @@ type authorityInfo struct {
 func (a authorityInfo) UserInfo() string { return a.userinfo }
 func (a authorityInfo) Host() string     { return a.host }
 func (a authorityInfo) Port() string     { return a.port }
+func (a authorityInfo) String() string {
+	var buf = bytes.NewBuffer(nil)
+	buf.WriteString(a.prefix)
+	buf.WriteString(a.userinfo)
+	if len(a.userinfo) > 0 {
+		buf.Write(atBytes)
+	}
+	buf.WriteString(a.host)
+	if len(a.port) > 0 {
+		buf.Write(colonBytes)
+	}
+	buf.WriteString(a.port)
+	buf.WriteString(a.path)
+	return buf.String()
+}
+
+var (
+	// byte literals
+	atBytes       = []byte("@")
+	colonBytes    = []byte(":")
+	fragmentBytes = []byte("#")
+	queryBytes    = []byte("?")
+)
 
 func parseAuthority(hier string) *authorityInfo {
 	// as per RFC 3986 Section 3.6
-	var userinfo, host, port, path string
+	var prefix, userinfo, host, port, path string
 
 	// authority sections can begin with a '//'
-	hier = strings.TrimPrefix(hier, "//")
+	if strings.HasPrefix(hier, "//") {
+		prefix = "//"
+		hier = strings.TrimPrefix(hier, "//")
+	}
 
 	slashEnd := strings.Index(hier, "/")
 	if slashEnd > 0 {
-		if slashEnd+1 < len(hier) {
+		if slashEnd < len(hier) {
 			path = hier[slashEnd:]
 		}
 		hier = hier[:slashEnd]
@@ -178,6 +210,7 @@ func parseAuthority(hier string) *authorityInfo {
 	}
 
 	return &authorityInfo{
+		prefix:   prefix,
 		userinfo: userinfo,
 		host:     host,
 		port:     port,
@@ -188,14 +221,91 @@ func parseAuthority(hier string) *authorityInfo {
 // Builder time!
 
 type URIBuilder interface {
-	SetScheme(scheme string)
-	SetUserInfo(userinfo string)
-	SetHost(host string)
-	SetPort(port string)
-	SetPath(path string)
-	SetQuery(query string)
-	SetFragment(fragment string)
+	SetScheme(scheme string) URIBuilder
+	SetUserInfo(userinfo string) URIBuilder
+	SetHost(host string) URIBuilder
+	SetPort(port string) URIBuilder
+	SetPath(path string) URIBuilder
+	SetQuery(query string) URIBuilder
+	SetFragment(fragment string) URIBuilder
 
-	Build() string
+	Build() URI
 	String() string
+}
+
+func (u *uri) ensureAuthorityExists() {
+	if u.authority == nil {
+		u.authority = &authorityInfo{}
+	}
+}
+
+func (u *uri) SetScheme(scheme string) URIBuilder {
+	u.scheme = scheme
+	return u
+}
+
+func (u *uri) SetUserInfo(userinfo string) URIBuilder {
+	u.ensureAuthorityExists()
+	u.authority.userinfo = userinfo
+	return u
+}
+
+func (u *uri) SetHost(host string) URIBuilder {
+	u.ensureAuthorityExists()
+	u.authority.host = host
+	return u
+}
+
+func (u *uri) SetPort(port string) URIBuilder {
+	u.ensureAuthorityExists()
+	u.authority.port = port
+	return u
+}
+
+func (u *uri) SetPath(path string) URIBuilder {
+	u.ensureAuthorityExists()
+	u.authority.path = path
+	return u
+}
+
+func (u *uri) SetQuery(query string) URIBuilder {
+	u.query = query
+	return u
+}
+
+func (u *uri) SetFragment(fragment string) URIBuilder {
+	u.fragment = fragment
+	return u
+}
+
+func (u *uri) Build() URI {
+	return u
+}
+
+func (u *uri) Builder() URIBuilder {
+	return u
+}
+
+func (u *uri) String() string {
+	// TODO(ttacon): how do we know if // exists in authority info?
+	// keep prefix on authority info?
+	var buf = bytes.NewBuffer(nil)
+	if len(u.scheme) > 0 {
+		buf.WriteString(u.scheme)
+		buf.Write(colonBytes)
+	}
+
+	buf.WriteString(u.authority.String())
+
+	if len(u.query) > 0 {
+		buf.Write(queryBytes)
+		buf.WriteString(u.query)
+	}
+
+	if len(u.fragment) > 0 {
+		buf.Write(fragmentBytes)
+		buf.WriteString(u.fragment)
+	}
+
+	return buf.String()
 }
