@@ -171,6 +171,7 @@ var (
 	colonBytes    = []byte(":")
 	fragmentBytes = []byte("#")
 	queryBytes    = []byte("?")
+	slashBytes    = []byte("/")
 )
 
 func parseAuthority(hier string) *authorityInfo {
