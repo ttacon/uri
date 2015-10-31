@@ -6,17 +6,32 @@ import (
 	"strings"
 )
 
+// URI represents a general RFC3986 specified URI.
 type URI interface {
+	// Scheme is the scheme the URI conforms to.
 	Scheme() string
+
+	// Authority returns the authority information for the URI.
 	Authority() Authority
 
+	// QueryPieces returns a map of key/value pairs of all parameters
+	// in the query string of the URI.
 	QueryPieces() map[string]string
+
+	// Fragment returns the fragement (component proceeded by '#') in the
+	// URI if there is one.
 	Fragment() string
 
+	// Builder returns a Builder that can be used to modify the URI.
 	Builder() URIBuilder
+
 	String() string
 }
 
+// Authority represents the authority information that a URI can contained
+// as specified by RFC3986. Be aware that the RFC does not specify any
+// information on username/password formatting - both are contained within
+// UserInfo.
 type Authority interface {
 	UserInfo() string
 	Host() string
@@ -30,6 +45,8 @@ var (
 	fragment = "#"
 )
 
+// ParseURI attempts to parse a URI and only returns an error if the URI
+// is not RFC3986 compliant.
 func ParseURI(raw string) (URI, error) {
 	var (
 		schemeEnd   = strings.Index(raw, colon)
@@ -221,6 +238,7 @@ func parseAuthority(hier string) *authorityInfo {
 
 // Builder time!
 
+// URIBuilder is a construct for building URIs.
 type URIBuilder interface {
 	SetScheme(scheme string) URIBuilder
 	SetUserInfo(userinfo string) URIBuilder
@@ -230,6 +248,7 @@ type URIBuilder interface {
 	SetQuery(query string) URIBuilder
 	SetFragment(fragment string) URIBuilder
 
+	// Returns the URI this URIBuilder represents.
 	Build() URI
 	String() string
 }

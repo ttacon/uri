@@ -5,6 +5,16 @@ import (
 	"fmt"
 )
 
+// MySQLURIBuilder builds a URI for use with the gomysql database/sql
+// driver. Useage is fairly simple:
+//
+//  b := NewMySQLURIBuilder()
+//  b.SetUser(user)
+//  b.SetPassword(password)
+//  b.SetHost(host)
+//  b.SetPort(port)
+//
+//  driverURI := b.String()
 type MySQLURIBuilder interface {
 	URIBuilder
 
@@ -21,6 +31,8 @@ type mysqlURI struct {
 	db       string
 }
 
+// NewMySQLURIBuilder returns a URI builder for builder
+// gomysql driver URIs.
 func NewMySQLURIBuilder() MySQLURIBuilder {
 	return &mysqlURI{
 		uri: &uri{
@@ -65,7 +77,9 @@ func (m *mysqlURI) String() string {
 	)
 }
 
-// Postgresql
+// PostgresqlURIBuilder is a URI builder for
+// connecting to Postgresql databases. Usage is similar to
+// MySQLURIBuilder.
 type PostgresqlURIBuilder interface {
 	URIBuilder
 
