@@ -1,4 +1,4 @@
- URI           = scheme ":" hier-part [ "?" query ] [ "#" fragment ]
+   URI           = scheme ":" hier-part [ "?" query ] [ "#" fragment ]
 
    hier-part     = "//" authority path-abempty
                  / path-absolute
