@@ -311,7 +311,7 @@ func Test_MoreParse(t *testing.T) {
 	_, err = ParseURI("http://www.詹姆斯.org/")
 	assert.NoError(t, err)
 
-	_, err = ParseURI("https:://user:passwd@256.256.256.256:8080/a?query=value#fragment")
+	_, err = ParseURI("https://user:passwd@256.256.256.256:8080/a?query=value#fragment")
 	assert.Equal(t, ErrInvalidHost, err)
 
 	_, err = ParseURI("file://c:/directory/filename")
@@ -348,5 +348,8 @@ func Test_MoreParse(t *testing.T) {
 	assert.Equal(t, ErrInvalidUserInfo, err)
 
 	_, err = ParseURI("urn:oasis:names:specification:docbook:dtd:xml:4.1.2")
+	assert.NoError(t, err)
+
+	_, err = ParseURI("https://user:passwd@[21DA:00D3:0000:2F3B:02AA:00FF:FE28:9C5A]:8080/a?query=value#fragment")
 	assert.NoError(t, err)
 }
