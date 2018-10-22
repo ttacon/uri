@@ -484,22 +484,22 @@ func Test_MoreParse(t *testing.T) {
 	assert.Equal(t, "abc?efg", u.Fragment())
 	assert.Equal(t, url.Values{"id": []string{"5"}, "part": []string{"three?another"}}, u.Query())
 
-	u, err = Parse("?")
+	_, err = Parse("?")
 	assert.Error(t, err)
 
-	u, err = Parse("#")
+	_, err = Parse("#")
 	assert.Error(t, err)
 
-	u, err = Parse("?#")
+	_, err = Parse("?#")
 	assert.Error(t, err)
 
-	u, err = Parse("")
+	_, err = Parse("")
 	assert.Error(t, err)
 
-	u, err = Parse(" ")
+	_, err = Parse(" ")
 	assert.Error(t, err)
 
-	u, err = Parse("ht?tp://host")
+	_, err = Parse("ht?tp://host")
 	assert.Error(t, err)
 
 	u, err = Parse("https://user:passwd@[21DA:00D3:0000:2F3B:02AA:00FF:FE28:9C5A%25en0]:8080/a?query=value#fragment")
@@ -515,7 +515,7 @@ func Test_Edge(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "https", u.Scheme())
 
-	u, err = Parse("ht?tps:")
+	_, err = Parse("ht?tps:")
 	assert.Error(t, err)
 
 	u, err = Parse("https://user:passwd@[21DA:00D3:0000:2F3B:02AA:00FF:FE28:9C5A%25]:8080/a?query=value#fragment")
