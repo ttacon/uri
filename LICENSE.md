@@ -1,5 +1,6 @@
 The MIT License (MIT)
 
+Copyright (c) 2018 Frederic Bidon
 Copyright (c) 2015 Trey Tacon
 
 Permission is hereby granted, free of charge, to any person obtaining a copy

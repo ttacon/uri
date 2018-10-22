@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"net"
+	"net/url"
 	"regexp"
 	"strings"
 )
@@ -20,21 +21,71 @@ var (
 	ErrInvalidHost      = errors.New("invalid host in URI")
 	ErrInvalidPort      = errors.New("invalid port in URI")
 	ErrInvalidUserInfo  = errors.New("invalid userinfo in URI")
+	ErrMissingHost      = errors.New("missing host in URI")
 )
+
+// SchemesWithDNSHost is a list of schemes for which the host validation
+// does not follow RFC3986 (which is quite generic), but assume a valid
+// DNS hostname instead.
+//
+// See: https://www.iana.org/assignments/uri-schemes/uri-schemes.xhtml
+//
+// This package level variable may be modified to alter the behavior of
+// Validate methods.
+var SchemesWithDNSHost map[string]bool
+
+func init() {
+	SchemesWithDNSHost = map[string]bool{
+		"dns":    true,
+		"dntp":   true,
+		"finger": true,
+		"ftp":    true,
+		"git":    true,
+		"http":   true,
+		"https":  true,
+		"imap":   true,
+		"irc":    true,
+		"jms":    true,
+		"mailto": true,
+		"nfs":    true,
+		"nntp":   true,
+		"ntp":    true,
+		//"postgres": true,
+		"redis":  true,
+		"rmi":    true,
+		"rtsp":   true,
+		"rsync":  true,
+		"sftp":   true,
+		"skype":  true,
+		"smtp":   true,
+		"snmp":   true,
+		"soap":   true,
+		"ssh":    true,
+		"steam":  true,
+		"svn":    true,
+		"tcp":    true,
+		"telnet": true,
+		"udp":    true,
+		"vnc":    true,
+		"wais":   true,
+		"ws":     true,
+		"wss":    true,
+	}
+}
 
 // URI represents a general RFC3986 specified URI.
 type URI interface {
 	// Scheme is the scheme the URI conforms to.
 	Scheme() string
 
-	// Authority returns the authority information for the URI.
+	// Authority returns the authority information for the URI, including "//" prefix.
 	Authority() Authority
 
-	// QueryPieces returns a map of key/value pairs of all parameters
+	// Query returns a map of key/value pairs of all parameters
 	// in the query string of the URI.
-	QueryPieces() map[string]string
+	Query() url.Values
 
-	// Fragment returns the fragement (component proceeded by '#') in the
+	// Fragment returns the fragment (component proceeded by '#') in the
 	// URI if there is one.
 	Fragment() string
 
@@ -48,10 +99,8 @@ type URI interface {
 	Validate() error
 }
 
-// Authority represents the authority information that a URI may contain
-// as specified by RFC3986. Be aware that the RFC does not specify any
-// information on username/password formatting - both are contained within
-// UserInfo.
+// Authority represents the authority information that a URI contains
+// as specified by RFC3986. Username and password are given by UserInfo().
 type Authority interface {
 	UserInfo() string
 	Host() string
@@ -63,6 +112,7 @@ type Authority interface {
 
 // Builder is a construct for building URIs.
 type Builder interface {
+	URI() URI
 	SetScheme(scheme string) Builder
 	SetUserInfo(userinfo string) Builder
 	SetHost(host string) Builder
@@ -72,50 +122,87 @@ type Builder interface {
 	SetFragment(fragment string) Builder
 
 	// Returns the URI this Builder represents.
-	Build() URI
 	String() string
 }
 
 const (
-	colon    = ":"
-	question = "?"
-	fragment = "#"
+	// string literals
+	colonMark       = ":"
+	questionMark    = "?"
+	fragmentMark    = "#"
+	percentMark     = "%"
+	atHost          = "@"
+	authorityPrefix = "//"
 )
 
-// IsURI tells if a URI is valid according to RFC3986
+var (
+	// byte literals
+	atBytes       = []byte(atHost)
+	colonBytes    = []byte(colonMark)
+	queryBytes    = []byte(questionMark)
+	fragmentBytes = []byte(fragmentMark)
+)
+
+// IsURI tells if a URI is valid according to RFC3986/RFC397
 func IsURI(raw string) bool {
-	_, err := ParseURI(raw)
+	_, err := Parse(raw)
 	return err == nil
 }
 
-// ParseURI attempts to parse a URI and only returns an error if the URI
+// Parse attempts to parse a URI and only returns an error if the URI
 // is not RFC3986 compliant.
-func ParseURI(raw string) (URI, error) {
+func Parse(raw string) (URI, error) {
 	var (
-		schemeEnd   = strings.Index(raw, colon)
-		hierPartEnd = strings.Index(raw, question)
-		queryEnd    = strings.Index(raw, fragment)
+		schemeEnd   = strings.Index(raw, colonMark)
+		hierPartEnd = strings.Index(raw, questionMark)
+		queryEnd    = strings.Index(raw, fragmentMark)
 
 		curr int
 	)
 
-	if schemeEnd < 1 {
-		return nil, ErrNoSchemeFound
-	} else if schemeEnd+1 == len(raw) {
+	// exclude pathological input
+	if schemeEnd == 1 || hierPartEnd == 1 || queryEnd == 1 {
 		return nil, ErrInvalidURI
 	}
 
+	if hierPartEnd > 0 && hierPartEnd < schemeEnd || queryEnd > 0 && queryEnd < schemeEnd {
+		// e.g. htt?p: ; h#ttp: ..
+		return nil, ErrInvalidURI
+	}
+
+	if queryEnd > 0 && queryEnd < hierPartEnd {
+		// e.g.  https://abc#a?b
+		hierPartEnd = queryEnd
+	}
+
+	if schemeEnd < 1 {
+		// TODO: support relative URI ref
+		return nil, ErrNoSchemeFound
+	}
+
 	scheme := raw[curr:schemeEnd]
+	if schemeEnd+1 == len(raw) {
+		// trailing : (e.g. http:)
+		u := &uri{
+			scheme: scheme,
+		}
+		return u, u.Validate()
+	}
+
 	curr = schemeEnd + 1
 
-	if hierPartEnd == len(raw) || (hierPartEnd < 0 && queryEnd < 0) {
-		authorityInfo, err := parseAuthority(raw[curr:])
+	if hierPartEnd == len(raw)-1 || (hierPartEnd < 0 && queryEnd < 0) {
+		// trailing ? or (no query & no fragment)
+		if hierPartEnd < 0 {
+			hierPartEnd = len(raw)
+		}
+		authorityInfo, err := parseAuthority(raw[curr:hierPartEnd])
 		if err != nil {
 			return nil, ErrInvalidURI
 		}
 		u := &uri{
 			scheme:    scheme,
-			hierPart:  raw[curr:], // since it's all that's left
+			hierPart:  raw[curr:hierPartEnd],
 			authority: authorityInfo,
 		}
 		return u, u.Validate()
@@ -126,6 +213,7 @@ func ParseURI(raw string) (URI, error) {
 		authorityInfo             *authorityInfo
 	)
 	var err error
+
 	if hierPartEnd > 0 {
 		hierPart = raw[curr:hierPartEnd]
 		authorityInfo, err = parseAuthority(hierPart)
@@ -133,25 +221,23 @@ func ParseURI(raw string) (URI, error) {
 			return nil, ErrInvalidURI
 		}
 		if hierPartEnd+1 < len(raw) {
-			query = raw[hierPartEnd+1:]
+			if queryEnd < 0 {
+				// query ?, no fragment
+				query = raw[hierPartEnd+1:]
+			} else if hierPartEnd < queryEnd-1 {
+				// query ?, fragment
+				query = raw[hierPartEnd+1 : queryEnd]
+			}
 		}
 		curr = hierPartEnd + 1
 	}
 
-	if queryEnd == len(raw) {
-		if hierPartEnd < 0 {
-			hierPart = raw[curr:queryEnd]
-			authorityInfo, err = parseAuthority(hierPart)
-			if err != nil {
-				return nil, ErrInvalidURI
-			}
-		} else {
-			query = raw[curr:hierPartEnd]
-			hierPart = raw[hierPartEnd+1 : queryEnd]
-			authorityInfo, err = parseAuthority(hierPart)
-			if err != nil {
-				return nil, ErrInvalidURI
-			}
+	if queryEnd == len(raw)-1 && hierPartEnd < 0 {
+		// trailing #,  no query "?"
+		hierPart = raw[curr:queryEnd]
+		authorityInfo, err = parseAuthority(hierPart)
+		if err != nil {
+			return nil, ErrInvalidURI
 		}
 		u := &uri{
 			scheme:    scheme,
@@ -160,15 +246,17 @@ func ParseURI(raw string) (URI, error) {
 			query:     query,
 		}
 		return u, u.Validate()
-	} else if queryEnd > 0 {
+	}
+
+	if queryEnd > 0 {
+		// there is a fragment
 		if hierPartEnd < 0 {
+			// no query
 			hierPart = raw[curr:queryEnd]
 			authorityInfo, err = parseAuthority(hierPart)
 			if err != nil {
 				return nil, ErrInvalidURI
 			}
-		} else {
-			query = raw[curr:queryEnd]
 		}
 		if queryEnd+1 < len(raw) {
 			fragment = raw[queryEnd+1:]
@@ -197,16 +285,23 @@ type uri struct {
 	authority *authorityInfo
 }
 
+func (u *uri) URI() URI {
+	return u
+}
+
 func (u *uri) Scheme() string {
 	return u.scheme
 }
 
 func (u *uri) Authority() Authority {
+	u.ensureAuthorityExists()
 	return u.authority
 }
 
-func (u *uri) QueryPieces() map[string]string {
-	return nil
+// Query returns parsed query parameters like standard lib URL.Query()
+func (u *uri) Query() url.Values {
+	v, _ := url.ParseQuery(u.query)
+	return v
 }
 
 func (u *uri) Fragment() string {
@@ -225,7 +320,7 @@ var (
 	// unreserved | pct-encoded | sub-delims | ":"
 	rexUserInfo = regexp.MustCompile(`^([\p{L}\d\-\._~\:!\$\&'\(\)\*\+,;=\?/]|(%[[:xdigit:]]{2})+)+$`)
 
-	rexIPv6Zone = regexp.MustCompile(`:+[^%]?%\d+([\w\d]+)?$`)
+	rexIPv6Zone = regexp.MustCompile(`:[^%:]+%25(([\p{L}\d\-\._~\:@!\$\&'\(\)\*\+,;=]|(%[[:xdigit:]]{2}))+)?$`)
 	rexPort     = regexp.MustCompile(`^\d+$`)
 )
 
@@ -254,6 +349,7 @@ func (u *uri) Validate() error {
 			}
 		}
 	}
+	// empty hierpart case
 	return nil
 }
 
@@ -270,13 +366,18 @@ func (a authorityInfo) Host() string     { return a.host }
 func (a authorityInfo) Port() string     { return a.port }
 func (a authorityInfo) Path() string     { return a.path }
 func (a authorityInfo) String() string {
-	var buf = bytes.NewBuffer(nil)
+	buf := bytes.NewBuffer(nil)
 	buf.WriteString(a.prefix)
 	buf.WriteString(a.userinfo)
 	if len(a.userinfo) > 0 {
 		buf.Write(atBytes)
 	}
-	buf.WriteString(a.host)
+	if strings.Index(a.host, colonMark) > 0 {
+		// ipv6 address host
+		buf.WriteString("[" + a.host + "]")
+	} else {
+		buf.WriteString(a.host)
+	}
 	if len(a.port) > 0 {
 		buf.Write(colonBytes)
 	}
@@ -296,28 +397,21 @@ func (a authorityInfo) Validate(schemes ...string) error {
 	}
 
 	if a.host != "" {
+		var isIP bool
 		if ok := rexIPv6Zone.MatchString(a.host); ok {
-			z := strings.Index(a.host, "%")
-			a.host = a.host[0:z]
+			z := strings.Index(a.host, percentMark)
+			isIP = net.ParseIP(a.host[0:z]) != nil
+		} else {
+			isIP = net.ParseIP(a.host) != nil
 		}
-		isIP := net.ParseIP(a.host) != nil
 		if !isIP {
 			var isHost bool
 			for _, scheme := range schemes {
-
-				switch scheme {
-				// for a few schemes with obvious reference to registered name
-				// as a dns name, use hostname validation rather than RFC3986
-				// registerer name (more accurate)
-				// this allows for instance, to detect that 256.256.256.256 is an invalid ip address.
-				//
-				// see https://www.iana.org/assignments/uri-schemes/uri-schemes.xhtml
-				// and feel free to add more
-				case "http", "https", "dns", "telnet", "ldap", "dntp", "git", "ftp", "sftp", "smtp", "snmp", "imap",
-					"svn", "udp", "tcp", "vnc", "ws", "soap", "rtsp", "rmi", "nntp", "ntp", "nfs", "mailto", "jms",
-					"irc", "finger":
+				if SchemesWithDNSHost[scheme] {
+					// DNS name
 					isHost = rexHostname.MatchString(a.host)
-				default:
+				} else {
+					// standard RFC 3986
 					isHost = rexRegname.MatchString(a.host)
 				}
 				if !isHost {
@@ -331,6 +425,9 @@ func (a authorityInfo) Validate(schemes ...string) error {
 		if ok := rexPort.MatchString(a.port); !ok {
 			return ErrInvalidPort
 		}
+		if a.host == "" {
+			return ErrMissingHost
+		}
 	}
 
 	if a.userinfo != "" {
@@ -342,30 +439,21 @@ func (a authorityInfo) Validate(schemes ...string) error {
 	return nil
 }
 
-var (
-	// byte literals
-	atBytes       = []byte("@")
-	colonBytes    = []byte(":")
-	fragmentBytes = []byte("#")
-	queryBytes    = []byte("?")
-	slashBytes    = []byte("/")
-)
-
 func parseAuthority(hier string) (*authorityInfo, error) {
 	// as per RFC 3986 Section 3.6
 	var prefix, userinfo, host, port, path string
 
-	// authority sections can begin with a '//'
-	if strings.HasPrefix(hier, "//") {
-		prefix = "//"
-		hier = strings.TrimPrefix(hier, "//")
+	// authority sections MUST begin with a '//'
+	if strings.HasPrefix(hier, authorityPrefix) {
+		prefix = authorityPrefix
+		hier = strings.TrimPrefix(hier, authorityPrefix)
 	}
 
-	slashEnd := strings.Index(hier, "/")
 	if prefix == "" {
 		path = hier
 	} else {
 		// authority   = [ userinfo "@" ] host [ ":" port ]
+		slashEnd := strings.Index(hier, "/")
 		if slashEnd > 0 {
 			if slashEnd < len(hier) {
 				path = hier[slashEnd:]
@@ -374,7 +462,7 @@ func parseAuthority(hier string) (*authorityInfo, error) {
 		}
 
 		host = hier
-		if at := strings.Index(host, "@"); at > 0 {
+		if at := strings.Index(host, atHost); at > 0 {
 			userinfo = host[:at]
 			if at+1 < len(host) {
 				host = host[at+1:]
@@ -391,13 +479,13 @@ func parseAuthority(hier string) (*authorityInfo, error) {
 			} else {
 				return nil, ErrInvalidURI
 			}
-			if colon := strings.Index(rawHost, ":"); colon >= 0 {
+			if colon := strings.Index(rawHost, colonMark); colon >= 0 {
 				if colon+1 < len(rawHost) {
 					port = rawHost[colon+1:]
 				}
 			}
 		} else {
-			if colon := strings.Index(host, ":"); colon > 0 {
+			if colon := strings.Index(host, colonMark); colon >= 0 {
 				if colon+1 < len(host) {
 					port = host[colon+1:]
 				}
@@ -418,6 +506,12 @@ func parseAuthority(hier string) (*authorityInfo, error) {
 func (u *uri) ensureAuthorityExists() {
 	if u.authority == nil {
 		u.authority = &authorityInfo{}
+	} else {
+		if u.authority.userinfo != "" ||
+			u.authority.host != "" ||
+			u.authority.port != "" {
+			u.authority.prefix = "//"
+		}
 	}
 }
 
@@ -460,18 +554,12 @@ func (u *uri) SetFragment(fragment string) Builder {
 	return u
 }
 
-func (u *uri) Build() URI {
-	return u
-}
-
 func (u *uri) Builder() Builder {
 	return u
 }
 
 func (u *uri) String() string {
-	// TODO(ttacon): how do we know if // exists in authority info?
-	// keep prefix on authority info?
-	var buf = bytes.NewBuffer(nil)
+	buf := bytes.NewBuffer(nil)
 	if len(u.scheme) > 0 {
 		buf.WriteString(u.scheme)
 		buf.Write(colonBytes)
