@@ -1,7 +1,7 @@
 # uri
 [![Build Status](https://travis-ci.org/fredbi/uri.svg?branch=master)](https://travis-ci.org/fredbi/uri)
 [![codecov](https://codecov.io/gh/fredbi/uri/branch/master/graph/badge.svg)](https://codecov.io/gh/fredbi/uri)
-[![license](http://img.shields.io/badge/license/License-MIT-yellow.svg)](https://raw.githubusercontent.com/fredbi/uri/master/LICENSE)
+[![license](http://img.shields.io/badge/license/License-MIT-yellow.svg)](https://raw.githubusercontent.com/fredbi/uri/master/LICENSE.md)
 [![GoDoc](https://godoc.org/github.com/fredbi/uri?status.svg)](http://godoc.org/github.com/fredbi/uri)
 [![GolangCI](https://golangci.com/badges/github.com/fredbi/uri.svg)](https://golangci.com)
 [![Go Report Card](https://goreportcard.com/badge/github.com/fredbi/uri)](https://goreportcard.com/report/github.com/fredbi/uri)
