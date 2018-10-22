@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-// errors
+// Validation errors
 var (
 	ErrNoSchemeFound    = errors.New("no scheme found in URI")
 	ErrInvalidURI       = errors.New("not a valid URI")
