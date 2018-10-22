@@ -111,6 +111,7 @@ type Authority interface {
 }
 
 // Builder is a construct for building URIs.
+// TODO: carry on some normalization job in setters
 type Builder interface {
 	URI() URI
 	SetScheme(scheme string) Builder

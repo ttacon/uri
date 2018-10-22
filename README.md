@@ -2,7 +2,7 @@
 [![Build Status](https://travis-ci.org/fredbi/uri.svg?branch=master)](https://travis-ci.org/fredbi/uri)
 [![codecov](https://codecov.io/gh/fredbi/uri/branch/master/graph/badge.svg)](https://codecov.io/gh/fredbi/uri)
 [![license](http://img.shields.io/github/license/mapshape/apistatus.svg)](https://raw.githubusercontent.com/fredbi/uri/master/LICENSE)
-[![GoDoc](https://godoc.org/github.com/go-openapi/strfmt?status.svg)](http://godoc.org/github.com/go-openapi/strfmt)
+[![GoDoc](https://godoc.org/github.com/fredbi/uri?status.svg)](http://godoc.org/github.com/fredbi/uri)
 [![GolangCI](https://golangci.com/badges/github.com/fredbi/uri.svg)](https://golangci.com)
 [![Go Report Card](https://goreportcard.com/badge/github.com/fredbi/uri)](https://goreportcard.com/report/github.com/fredbi/uri)
 
