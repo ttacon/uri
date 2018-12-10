@@ -30,7 +30,7 @@ var (
 //
 // See: https://www.iana.org/assignments/uri-schemes/uri-schemes.xhtml
 //
-// This package level variable may be modified to alter the behavior of
+// This variable at the package level may be modified to alter the behavior of
 // Validate methods.
 var SchemesWithDNSHost map[string]bool
 
@@ -150,13 +150,30 @@ func IsURI(raw string) bool {
 	return err == nil
 }
 
-// Parse attempts to parse a URI and only returns an error if the URI
+// IsURIReference tells if a URI reference is valid according to RFC3986/RFC397
+func IsURIReference(raw string) bool {
+	_, err := ParseReference(raw)
+	return err == nil
+}
+
+// Parse attempts to parse a URI and returns an error if the URI
 // is not RFC3986 compliant.
 func Parse(raw string) (URI, error) {
+	return parse(raw, false)
+}
+
+// ParseReference attempts to parse a URI reference and returns an error if the URI
+// is not RFC3986 compliant.
+func ParseReference(raw string) (URI, error) {
+	return parse(raw, true)
+}
+
+func parse(raw string, withURIReference bool) (URI, error) {
 	var (
 		schemeEnd   = strings.Index(raw, colonMark)
 		hierPartEnd = strings.Index(raw, questionMark)
 		queryEnd    = strings.Index(raw, fragmentMark)
+		scheme      string
 
 		curr int
 	)
@@ -176,18 +193,17 @@ func Parse(raw string) (URI, error) {
 		hierPartEnd = queryEnd
 	}
 
-	if schemeEnd < 1 {
-		// TODO: support relative URI ref
-		return nil, ErrNoSchemeFound
-	}
-
-	scheme := raw[curr:schemeEnd]
-	if schemeEnd+1 == len(raw) {
-		// trailing : (e.g. http:)
-		u := &uri{
-			scheme: scheme,
+	if schemeEnd > 0 {
+		scheme = raw[curr:schemeEnd]
+		if schemeEnd+1 == len(raw) {
+			// trailing : (e.g. http:)
+			u := &uri{
+				scheme: scheme,
+			}
+			return u, u.Validate()
 		}
-		return u, u.Validate()
+	} else if !withURIReference {
+		return nil, ErrNoSchemeFound
 	}
 
 	curr = schemeEnd + 1

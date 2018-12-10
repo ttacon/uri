@@ -531,4 +531,86 @@ func Test_Edge(t *testing.T) {
 	// empty host
 	_, err = Parse("https://user:passwd@:8080/a?query=value#fragment")
 	assert.Equal(t, ErrMissingHost, err)
+
+	// percent encoded host
+	u, err = Parse("https://user:passwd@ex%20ample.com:8080/a?query=value#fragment")
+	assert.Equal(t, "ex%20ample.com", u.Authority().Host())
+}
+
+// Test_Relative asserts that relative uris are invalid (e.g. mssing scheme)
+func Test_Relative(t *testing.T) {
+	invalidURIrefs := []string{
+		"//host.domain.com/a/b",
+	}
+	for _, invalidURIref := range invalidURIrefs {
+		_, err := Parse(invalidURIref)
+		assert.Error(t, err)
+
+		_, verr := ParseReference(invalidURIref)
+		assert.NoError(t, verr)
+	}
+}
+
+const pathThatLooksSchemeRelative = "//not.a.user@not.a.host/just/a/path"
+
+// Test_URL verifies that go all url stdlib tests pass as uri with this package.
+// valid URLs are valid URI or valid URI references
+// see https://golang.org/src/net/url/url_test.go
+// NOTE: our uri package makes a strict distinction between uri and uri-reference.
+func Test_URL(t *testing.T) {
+	var parseRequestURLTests = []struct {
+		url                    string
+		expectedValid          bool
+		expectedValidReference bool
+	}{
+		{"http://foo.com", true, true},
+		{"http://foo.com/", true, true},
+		{"http://foo.com/path", true, true},
+		{"/", false, true},
+		{pathThatLooksSchemeRelative, false, true},
+		{"//not.a.user@%66%6f%6f.com/just/a/path/also", false, true},
+		{"*", false, true}, // ???
+		{"http://192.168.0.1/", true, true},
+		{"http://192.168.0.1:8080/", true, true},
+		{"http://[fe80::1]/", true, true},
+		{"http://[fe80::1]:8080/", true, true},
+		// Tests exercising RFC 6874 compliance:
+		{"http://[fe80::1%25en0]/", true, true},                 // with alphanum zone identifier
+		{"http://[fe80::1%25en0]:8080/", true, true},            // with alphanum zone identifier
+		{"http://[fe80::1%25%65%6e%301-._~]/", true, true},      // with percent-encoded+unreserved zone identifier
+		{"http://[fe80::1%25%65%6e%301-._~]:8080/", true, true}, // with percent-encoded+unreserved zone identifier
+		{"foo.html", false, true},
+		{"../dir/", false, true},
+		{"http://192.168.0.%31/", false, false},
+		{"http://192.168.0.%31:8080/", false, false},
+		{"http://[fe80::%31]/", false, false},
+		{"http://[fe80::%31]:8080/", false, false},
+		{"http://[fe80::%31%25en0]/", false, false},
+		{"http://[fe80::%31%25en0]:8080/", false, false},
+		// These two cases are valid as textual representations as
+		// described in RFC 4007, but are not valid as address
+		// literals with IPv6 zone identifiers in URIs as described in
+		// RFC 6874.
+		{"http://[fe80::1%en0]/", false, false},
+		{"http://[fe80::1%en0]:8080/", false, false},
+		// Added this
+		{"", false, true},
+	}
+
+	for _, test := range parseRequestURLTests {
+		_, err := Parse(test.url)
+		switch {
+		case test.expectedValid && err != nil:
+			t.Errorf("Parse(%q) gave err %v; want no error", test.url, err)
+		case !test.expectedValid && err == nil:
+			t.Errorf("Parse(%q) gave nil error; want some error", test.url)
+		}
+		isRef := IsURIReference(test.url)
+		assert.Equalf(t, test.expectedValidReference, isRef, "IsURIReference(%q) gave returned %t; want %t", test.url, isRef, test.expectedValidReference)
+	}
+
+	_, err := Parse(pathThatLooksSchemeRelative)
+	assert.Error(t, err)
+	_, err = ParseReference(pathThatLooksSchemeRelative)
+	assert.NoError(t, err)
 }
