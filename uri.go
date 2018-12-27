@@ -24,52 +24,50 @@ var (
 	ErrMissingHost      = errors.New("missing host in URI")
 )
 
-// SchemesWithDNSHost is a list of schemes for which the host validation
+// SchemesWithDNSHost provides a list of schemes for which the host validation
 // does not follow RFC3986 (which is quite generic), but assume a valid
 // DNS hostname instead.
 //
 // See: https://www.iana.org/assignments/uri-schemes/uri-schemes.xhtml
 //
-// This variable at the package level may be modified to alter the behavior of
-// Validate methods.
 var SchemesWithDNSHost map[string]bool
 
 func init() {
 	SchemesWithDNSHost = map[string]bool{
-		"dns":    true,
-		"dntp":   true,
-		"finger": true,
-		"ftp":    true,
-		"git":    true,
-		"http":   true,
-		"https":  true,
-		"imap":   true,
-		"irc":    true,
-		"jms":    true,
-		"mailto": true,
-		"nfs":    true,
-		"nntp":   true,
-		"ntp":    true,
-		//"postgres": true,
-		"redis":  true,
-		"rmi":    true,
-		"rtsp":   true,
-		"rsync":  true,
-		"sftp":   true,
-		"skype":  true,
-		"smtp":   true,
-		"snmp":   true,
-		"soap":   true,
-		"ssh":    true,
-		"steam":  true,
-		"svn":    true,
-		"tcp":    true,
-		"telnet": true,
-		"udp":    true,
-		"vnc":    true,
-		"wais":   true,
-		"ws":     true,
-		"wss":    true,
+		"dns":      true,
+		"dntp":     true,
+		"finger":   true,
+		"ftp":      true,
+		"git":      true,
+		"http":     true,
+		"https":    true,
+		"imap":     true,
+		"irc":      true,
+		"jms":      true,
+		"mailto":   true,
+		"nfs":      true,
+		"nntp":     true,
+		"ntp":      true,
+		"postgres": true,
+		"redis":    true,
+		"rmi":      true,
+		"rtsp":     true,
+		"rsync":    true,
+		"sftp":     true,
+		"skype":    true,
+		"smtp":     true,
+		"snmp":     true,
+		"soap":     true,
+		"ssh":      true,
+		"steam":    true,
+		"svn":      true,
+		"tcp":      true,
+		"telnet":   true,
+		"udp":      true,
+		"vnc":      true,
+		"wais":     true,
+		"ws":       true,
+		"wss":      true,
 	}
 }
 
@@ -111,7 +109,6 @@ type Authority interface {
 }
 
 // Builder is a construct for building URIs.
-// TODO: carry on some normalization job in setters
 type Builder interface {
 	URI() URI
 	SetScheme(scheme string) Builder
@@ -162,7 +159,7 @@ func Parse(raw string) (URI, error) {
 	return parse(raw, false)
 }
 
-// ParseReference attempts to parse a URI reference and returns an error if the URI
+// ParseReference attempts to parse a URI relative reference and returns an error if the URI
 // is not RFC3986 compliant.
 func ParseReference(raw string) (URI, error) {
 	return parse(raw, true)
@@ -193,7 +190,9 @@ func parse(raw string, withURIReference bool) (URI, error) {
 		hierPartEnd = queryEnd
 	}
 
-	if schemeEnd > 0 {
+	isRelative := strings.HasPrefix(raw, authorityPrefix)
+	switch {
+	case schemeEnd > 0 && !isRelative:
 		scheme = raw[curr:schemeEnd]
 		if schemeEnd+1 == len(raw) {
 			// trailing : (e.g. http:)
@@ -202,8 +201,11 @@ func parse(raw string, withURIReference bool) (URI, error) {
 			}
 			return u, u.Validate()
 		}
-	} else if !withURIReference {
+	case !withURIReference:
 		return nil, ErrNoSchemeFound
+	case isRelative:
+		// start with // and a ':' is following... e.g //example.com:8080/path
+		schemeEnd = -1
 	}
 
 	curr = schemeEnd + 1
@@ -330,7 +332,7 @@ var (
 	rexFragment = regexp.MustCompile(`^([\p{L}\d\-\._~\:@!\$\&'\(\)\*\+,;=\?/]|(%[[:xdigit:]]{2})+)+$`)
 	rexQuery    = rexFragment
 	rexSegment  = regexp.MustCompile(`^([\p{L}\d\-\._~\:@!\$\&'\(\)\*\+,;=]|(%[[:xdigit:]]{2})+)+$`)
-	rexHostname = regexp.MustCompile(`^[\p{L}](([-\p{L}\d]+)?[\p{L}\d])?(\.\p{L}(([-\p{L}\d]+)?[\p{L}\d])?)*$`)
+	rexHostname = regexp.MustCompile(`^[a-zA-Z0-9\p{L}]((-?[a-zA-Z0-9\p{L}]+)?|(([a-zA-Z0-9-\p{L}]{0,63})(\.)){1,6}([a-zA-Z\p{L}]){2,})$`)
 
 	// unreserved | pct-encoded | sub-delims
 	rexRegname = regexp.MustCompile(`^([\p{L}\d\-\._~!\$\&'\(\)\*\+,;=]|(%[[:xdigit:]]{2})+)+$`)
@@ -423,13 +425,17 @@ func (a authorityInfo) Validate(schemes ...string) error {
 		}
 		if !isIP {
 			var isHost bool
+			unescapedHost, err := url.PathUnescape(a.host)
+			if err != nil {
+				return ErrInvalidHost
+			}
 			for _, scheme := range schemes {
 				if SchemesWithDNSHost[scheme] {
 					// DNS name
-					isHost = rexHostname.MatchString(a.host)
+					isHost = rexHostname.MatchString(unescapedHost)
 				} else {
 					// standard RFC 3986
-					isHost = rexRegname.MatchString(a.host)
+					isHost = rexRegname.MatchString(unescapedHost)
 				}
 				if !isHost {
 					return ErrInvalidHost

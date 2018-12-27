@@ -2,7 +2,7 @@
 //
 // This is based on the work from ttacon/uri (credits: Trey Tacon).
 //
-// This fork concentrates on RFC 3986 strictness for URI validation and parsing.
+// This fork concentrates on RFC 3986 strictness for URI parsing and validation.
 //
 // Reference: https://tools.ietf.org/html/rfc3986
 //

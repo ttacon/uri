@@ -365,7 +365,10 @@ func TestMoreURI(t *testing.T) {
 	}
 	for _, validURI := range validURIs {
 		res := IsURI(validURI)
-		assert.True(t, res, "expected %q to be a valid URI", validURI)
+		if !assert.True(t, res, "expected %q to be a valid URI", validURI) {
+			_, err := Parse(validURI)
+			t.Logf("got: %v", err)
+		}
 	}
 }
 
@@ -427,7 +430,10 @@ func Test_MoreParse(t *testing.T) {
 	_, err = Parse("tel:+1-816-555-1212")
 	assert.NoError(t, err)
 
-	_, err = Parse("http+unix://%2Fvar%2Frun%2Fsocket/path?key=value")
+	_, err = Parse("http+unix://%2Fvar%2Frun%2Fsocket/path?key=value") // no authority => no "//"
+	assert.Equal(t, ErrInvalidHost, err)
+
+	_, err = Parse("http+unix:/%2Fvar%2Frun%2Fsocket/path?key=value")
 	assert.NoError(t, err)
 
 	_, err = Parse("https://user{}:passwd@[FF02:30:0:0:0:0:0:5%25en0]:8080/a?query=value#fragment")
@@ -533,14 +539,25 @@ func Test_Edge(t *testing.T) {
 	assert.Equal(t, ErrMissingHost, err)
 
 	// percent encoded host
-	u, err = Parse("https://user:passwd@ex%20ample.com:8080/a?query=value#fragment")
-	assert.Equal(t, "ex%20ample.com", u.Authority().Host())
+	_, err = Parse("urn://user:passwd@ex%7Cample.com:8080/a?query=value#fragment")
+	assert.Errorf(t, err, "expected uri with percent encoded host to be invalid")
+
+	u, err = Parse("urn://user:passwd@ex%2Dample.com:8080/a?query=value#fragment")
+	if assert.NoErrorf(t, err, "expected uri with percent encoded host to be valid") {
+		assert.Equal(t, "ex%2Dample.com", u.Authority().Host())
+	}
+	// check percent encoding with DNS hostname
+	u, err = Parse("https://user:passwd@ex%2Dample.com:8080/a?query=value#fragment")
+	if assert.NoErrorf(t, err, "expected uri with percent encoded host to be valid") {
+		assert.Equal(t, "ex%2Dample.com", u.Authority().Host())
+	}
 }
 
-// Test_Relative asserts that relative uris are invalid (e.g. mssing scheme)
+// Test_Relative asserts that relative uris are invalid (e.g. missing scheme)
 func Test_Relative(t *testing.T) {
 	invalidURIrefs := []string{
 		"//host.domain.com/a/b",
+		"//host.domain.com:8080/a/b",
 	}
 	for _, invalidURIref := range invalidURIrefs {
 		_, err := Parse(invalidURIref)
@@ -551,12 +568,29 @@ func Test_Relative(t *testing.T) {
 	}
 }
 
+func Test_AbsoluteReference(t *testing.T) {
+	v, _ := ParseReference("//host.domain.com:8080/a/b")
+	if !assert.NotNil(t, v) {
+		assert.Equal(t, "host.domain.com", v.Authority().Host())
+		assert.Equal(t, "8080", v.Authority().Port())
+		assert.Equal(t, "/a/b", v.Authority().Path())
+	}
+
+	v, _ = ParseReference("//host.domain.com:8080?query=x/a/b")
+	if !assert.NotNil(t, v) {
+		assert.Equal(t, "host.domain.com", v.Authority().Host())
+		assert.Equal(t, "8080", v.Authority().Port())
+		assert.Equal(t, "/a/b", v.Authority().Path())
+		assert.Equal(t, "query=x", v.Query())
+	}
+}
+
 const pathThatLooksSchemeRelative = "//not.a.user@not.a.host/just/a/path"
 
 // Test_URL verifies that go all url stdlib tests pass as uri with this package.
 // valid URLs are valid URI or valid URI references
 // see https://golang.org/src/net/url/url_test.go
-// NOTE: our uri package makes a strict distinction between uri and uri-reference.
+// NOTE: this package makes a strict distinction between uri and uri-reference.
 func Test_URL(t *testing.T) {
 	var parseRequestURLTests = []struct {
 		url                    string
@@ -613,4 +647,39 @@ func Test_URL(t *testing.T) {
 	assert.Error(t, err)
 	_, err = ParseReference(pathThatLooksSchemeRelative)
 	assert.NoError(t, err)
+}
+
+func ExampleParse() {
+	u, err := Parse("https://example.com:8080/path")
+	if err != nil {
+		fmt.Printf("Invalid URI")
+	} else {
+		fmt.Printf("%s", u.Scheme())
+	}
+	// Output: https
+}
+
+func ExampleParseReference() {
+	u, err := ParseReference("//example.com/path")
+	if err != nil {
+		fmt.Printf("Invalid URI reference")
+	} else {
+		fmt.Printf("%s", u.Authority().Path())
+	}
+	// Output: /path
+}
+
+func ExampleIsURI() {
+	isValid := IsURI("urn://example.com?query=x#fragment/path") // true
+	fmt.Printf("%t\n", isValid)
+	isValid = IsURI("//example.com?query=x#fragment/path") // false
+	fmt.Printf("%t\n", isValid)
+	// Output: true
+	// false
+}
+
+func ExampleIsURIReference() {
+	isValid := IsURIReference("//example.com?query=x#fragment/path") // true
+	fmt.Printf("%t\n", isValid)
+	// Output: true
 }
