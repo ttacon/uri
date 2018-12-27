@@ -8,7 +8,44 @@
 
 Package uri is meant to be an RFC 3986 compliant URI builder, parser and validator for golang.
 
-References:
+It supports strict RFC validation for URI and URI relative references.
+
+## Usage
+
+##### Parsing
+
+```golang 
+	u, err := Parse("https://example.com:8080/path")
+	if err != nil {
+		fmt.Printf("Invalid URI")
+	} else {
+		fmt.Printf("%s", u.Scheme())
+	}
+	// Output: https
+```
+
+```golang 
+	u, err := ParseReference("//example.com/path")
+	if err != nil {
+		fmt.Printf("Invalid URI reference")
+	} else {
+		fmt.Printf("%s", u.Authority().Path())
+	}
+	// Output: /path
+```
+
+##### Validation
+
+```golang 
+    isValid := IsURI("urn://example.com?query=x#fragment/path") // true
+    isValid= IsURI("//example.com?query=x#fragment/path") // false
+
+    isValid= IsURIReference("//example.com?query=x#fragment/path") // true
+```
+
+##### Building
+
+## Reference specifications
 * https://tools.ietf.org/html/rfc3986
 
 Internationalization support:
@@ -29,10 +66,15 @@ For url normalization, see github.com/PuertokitoBio/purell.
 Not supported:
 * provisions for "IPvFuture" are not implemented
 
+hostnames vs domain names:
+* a list of common schemes triggers the validation of hostname against domain name rules
+
+Example:
+
 ## Credits
 
 Tests have been aggregated from test suites of URI validators from other languages:
-perl, python, scala, .Net.
+perl, python, scala, .Net. and the golang url standard library.
 
-> This package is based on the work from ttacon/uri (credits: Trey Tacon).
+> This package was initially based on the work from ttacon/uri (credits: Trey Tacon)
 > Extra features like MySQL URIs present in the original repo have been removed.
