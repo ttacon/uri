@@ -357,10 +357,7 @@ func (u *uri) Validate() error {
 	}
 	if u.hierPart != "" {
 		if u.authority != nil {
-			a := u.Authority()
-			if a != nil {
-				return a.Validate(u.scheme)
-			}
+			return u.Authority().Validate(u.scheme)
 		}
 	}
 	// empty hierpart case
