@@ -29,46 +29,41 @@ var (
 // DNS hostname instead.
 //
 // See: https://www.iana.org/assignments/uri-schemes/uri-schemes.xhtml
-//
-var SchemesWithDNSHost map[string]bool
-
-func init() {
-	SchemesWithDNSHost = map[string]bool{
-		"dns":      true,
-		"dntp":     true,
-		"finger":   true,
-		"ftp":      true,
-		"git":      true,
-		"http":     true,
-		"https":    true,
-		"imap":     true,
-		"irc":      true,
-		"jms":      true,
-		"mailto":   true,
-		"nfs":      true,
-		"nntp":     true,
-		"ntp":      true,
-		"postgres": true,
-		"redis":    true,
-		"rmi":      true,
-		"rtsp":     true,
-		"rsync":    true,
-		"sftp":     true,
-		"skype":    true,
-		"smtp":     true,
-		"snmp":     true,
-		"soap":     true,
-		"ssh":      true,
-		"steam":    true,
-		"svn":      true,
-		"tcp":      true,
-		"telnet":   true,
-		"udp":      true,
-		"vnc":      true,
-		"wais":     true,
-		"ws":       true,
-		"wss":      true,
-	}
+var SchemesWithDNSHost = map[string]bool{
+	"dns":      true,
+	"dntp":     true,
+	"finger":   true,
+	"ftp":      true,
+	"git":      true,
+	"http":     true,
+	"https":    true,
+	"imap":     true,
+	"irc":      true,
+	"jms":      true,
+	"mailto":   true,
+	"nfs":      true,
+	"nntp":     true,
+	"ntp":      true,
+	"postgres": true,
+	"redis":    true,
+	"rmi":      true,
+	"rtsp":     true,
+	"rsync":    true,
+	"sftp":     true,
+	"skype":    true,
+	"smtp":     true,
+	"snmp":     true,
+	"soap":     true,
+	"ssh":      true,
+	"steam":    true,
+	"svn":      true,
+	"tcp":      true,
+	"telnet":   true,
+	"udp":      true,
+	"vnc":      true,
+	"wais":     true,
+	"ws":       true,
+	"wss":      true,
 }
 
 // URI represents a general RFC3986 specified URI.
@@ -430,7 +425,7 @@ func (a authorityInfo) Validate(schemes ...string) error {
 				return ErrInvalidHost
 			}
 			for _, scheme := range schemes {
-				if SchemesWithDNSHost[scheme] {
+				if _, ok := SchemesWithDNSHost[scheme]; ok {
 					// DNS name
 					isHost = rexHostname.MatchString(unescapedHost)
 				} else {
