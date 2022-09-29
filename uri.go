@@ -169,7 +169,7 @@ type Builder interface {
 }
 
 const (
-	// string literals
+	// char and string literals
 	colonMark       = ':'
 	questionMark    = '?'
 	fragmentMark    = '#'
