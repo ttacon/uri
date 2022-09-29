@@ -13,7 +13,6 @@
 package uri
 
 import (
-	"bytes"
 	"errors"
 	"net"
 	"net/url"
@@ -419,7 +418,7 @@ func (a authorityInfo) Host() string     { return a.host }
 func (a authorityInfo) Port() string     { return a.port }
 func (a authorityInfo) Path() string     { return a.path }
 func (a authorityInfo) String() string {
-	buf := bytes.NewBuffer(nil)
+	buf := strings.Builder{}
 	buf.WriteString(a.prefix)
 	buf.WriteString(a.userinfo)
 	if len(a.userinfo) > 0 {
@@ -616,7 +615,7 @@ func (u *uri) Builder() Builder {
 }
 
 func (u *uri) String() string {
-	buf := bytes.NewBuffer(nil)
+	buf := strings.Builder{}
 	if len(u.scheme) > 0 {
 		buf.WriteString(u.scheme)
 		buf.WriteByte(colonMark)
