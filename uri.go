@@ -170,20 +170,20 @@ type Builder interface {
 
 const (
 	// string literals
-	colonMark       = ":"
-	questionMark    = "?"
-	fragmentMark    = "#"
-	percentMark     = "%"
-	atHost          = "@"
+	colonMark       = ':'
+	questionMark    = '?'
+	fragmentMark    = '#'
+	percentMark     = '%'
+	atHost          = '@'
 	authorityPrefix = "//"
 )
 
 var (
 	// byte literals
-	atBytes       = []byte(atHost)
-	colonBytes    = []byte(colonMark)
-	queryBytes    = []byte(questionMark)
-	fragmentBytes = []byte(fragmentMark)
+	atBytes       = []byte{atHost}
+	colonBytes    = []byte{colonMark}
+	queryBytes    = []byte{questionMark}
+	fragmentBytes = []byte{fragmentMark}
 )
 
 // IsURI tells if a URI is valid according to RFC3986/RFC397
@@ -212,9 +212,9 @@ func ParseReference(raw string) (URI, error) {
 
 func parse(raw string, withURIReference bool) (URI, error) {
 	var (
-		schemeEnd   = strings.Index(raw, colonMark)
-		hierPartEnd = strings.Index(raw, questionMark)
-		queryEnd    = strings.Index(raw, fragmentMark)
+		schemeEnd   = strings.IndexByte(raw, colonMark)
+		hierPartEnd = strings.IndexByte(raw, questionMark)
+		queryEnd    = strings.IndexByte(raw, fragmentMark)
 		scheme      string
 
 		curr int
@@ -433,7 +433,7 @@ func (a authorityInfo) String() string {
 	if len(a.userinfo) > 0 {
 		buf.Write(atBytes)
 	}
-	if strings.Index(a.host, colonMark) > 0 {
+	if strings.IndexByte(a.host, colonMark) > 0 {
 		// ipv6 address host
 		buf.WriteString("[" + a.host + "]")
 	} else {
@@ -460,7 +460,7 @@ func (a authorityInfo) Validate(schemes ...string) error {
 	if a.host != "" {
 		var isIP bool
 		if ok := rexIPv6Zone.MatchString(a.host); ok {
-			z := strings.Index(a.host, percentMark)
+			z := strings.IndexByte(a.host, percentMark)
 			isIP = net.ParseIP(a.host[0:z]) != nil
 		} else {
 			isIP = net.ParseIP(a.host) != nil
@@ -527,7 +527,7 @@ func parseAuthority(hier string) (*authorityInfo, error) {
 		}
 
 		host = hier
-		if at := strings.Index(host, atHost); at > 0 {
+		if at := strings.IndexByte(host, atHost); at > 0 {
 			userinfo = host[:at]
 			if at+1 < len(host) {
 				host = host[at+1:]
@@ -544,13 +544,13 @@ func parseAuthority(hier string) (*authorityInfo, error) {
 			} else {
 				return nil, ErrInvalidURI
 			}
-			if colon := strings.Index(rawHost, colonMark); colon >= 0 {
+			if colon := strings.IndexByte(rawHost, colonMark); colon >= 0 {
 				if colon+1 < len(rawHost) {
 					port = rawHost[colon+1:]
 				}
 			}
 		} else {
-			if colon := strings.Index(host, colonMark); colon >= 0 {
+			if colon := strings.IndexByte(host, colonMark); colon >= 0 {
 				if colon+1 < len(host) {
 					port = host[colon+1:]
 				}
