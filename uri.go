@@ -178,14 +178,6 @@ const (
 	authorityPrefix = "//"
 )
 
-var (
-	// byte literals
-	atBytes       = []byte{atHost}
-	colonBytes    = []byte{colonMark}
-	queryBytes    = []byte{questionMark}
-	fragmentBytes = []byte{fragmentMark}
-)
-
 // IsURI tells if a URI is valid according to RFC3986/RFC397
 func IsURI(raw string) bool {
 	_, err := Parse(raw)
@@ -431,7 +423,7 @@ func (a authorityInfo) String() string {
 	buf.WriteString(a.prefix)
 	buf.WriteString(a.userinfo)
 	if len(a.userinfo) > 0 {
-		buf.Write(atBytes)
+		buf.WriteByte(atHost)
 	}
 	if strings.IndexByte(a.host, colonMark) > 0 {
 		// ipv6 address host
@@ -440,7 +432,7 @@ func (a authorityInfo) String() string {
 		buf.WriteString(a.host)
 	}
 	if len(a.port) > 0 {
-		buf.Write(colonBytes)
+		buf.WriteByte(colonMark)
 	}
 	buf.WriteString(a.port)
 	buf.WriteString(a.path)
@@ -627,18 +619,18 @@ func (u *uri) String() string {
 	buf := bytes.NewBuffer(nil)
 	if len(u.scheme) > 0 {
 		buf.WriteString(u.scheme)
-		buf.Write(colonBytes)
+		buf.WriteByte(colonMark)
 	}
 
 	buf.WriteString(u.authority.String())
 
 	if len(u.query) > 0 {
-		buf.Write(queryBytes)
+		buf.WriteByte(questionMark)
 		buf.WriteString(u.query)
 	}
 
 	if len(u.fragment) > 0 {
-		buf.Write(fragmentBytes)
+		buf.WriteByte(fragmentMark)
 		buf.WriteString(u.fragment)
 	}
 
