@@ -510,7 +510,7 @@ func parseAuthority(hier string) (*authorityInfo, error) {
 		path = hier
 	} else {
 		// authority   = [ userinfo "@" ] host [ ":" port ]
-		slashEnd := strings.Index(hier, "/")
+		slashEnd := strings.IndexByte(hier, '/')
 		if slashEnd > 0 {
 			if slashEnd < len(hier) {
 				path = hier[slashEnd:]
@@ -526,10 +526,10 @@ func parseAuthority(hier string) (*authorityInfo, error) {
 			}
 		}
 
-		if bracket := strings.Index(host, "["); bracket >= 0 {
+		if bracket := strings.IndexByte(host, '['); bracket >= 0 {
 			// ipv6 addresses: "[" xx:yy:zz "]":port
 			rawHost := host
-			closingbracket := strings.Index(host, "]")
+			closingbracket := strings.IndexByte(host, ']')
 			if closingbracket > 0 {
 				host = host[bracket+1 : closingbracket-bracket]
 				rawHost = rawHost[closingbracket+1:]
