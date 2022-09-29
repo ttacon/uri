@@ -36,46 +36,84 @@ var (
 	ErrMissingHost      = errors.New("missing host in URI")
 )
 
-// SchemesWithDNSHost provides a list of schemes for which the host validation
-// does not follow RFC3986 (which is quite generic), but assume a valid
+// UsesDNSHostValidation returns true if the provided scheme has host validation
+// that does not follow RFC3986 (which is quite generic), but assume a valid
 // DNS hostname instead.
 //
 // See: https://www.iana.org/assignments/uri-schemes/uri-schemes.xhtml
-var SchemesWithDNSHost = map[string]bool{
-	"dns":      true,
-	"dntp":     true,
-	"finger":   true,
-	"ftp":      true,
-	"git":      true,
-	"http":     true,
-	"https":    true,
-	"imap":     true,
-	"irc":      true,
-	"jms":      true,
-	"mailto":   true,
-	"nfs":      true,
-	"nntp":     true,
-	"ntp":      true,
-	"postgres": true,
-	"redis":    true,
-	"rmi":      true,
-	"rtsp":     true,
-	"rsync":    true,
-	"sftp":     true,
-	"skype":    true,
-	"smtp":     true,
-	"snmp":     true,
-	"soap":     true,
-	"ssh":      true,
-	"steam":    true,
-	"svn":      true,
-	"tcp":      true,
-	"telnet":   true,
-	"udp":      true,
-	"vnc":      true,
-	"wais":     true,
-	"ws":       true,
-	"wss":      true,
+func UsesDNSHostValidation(scheme string) bool {
+	switch scheme {
+	case "dns":
+		return true
+	case "dntp":
+		return true
+	case "finger":
+		return true
+	case "ftp":
+		return true
+	case "git":
+		return true
+	case "http":
+		return true
+	case "https":
+		return true
+	case "imap":
+		return true
+	case "irc":
+		return true
+	case "jms":
+		return true
+	case "mailto":
+		return true
+	case "nfs":
+		return true
+	case "nntp":
+		return true
+	case "ntp":
+		return true
+	case "postgres":
+		return true
+	case "redis":
+		return true
+	case "rmi":
+		return true
+	case "rtsp":
+		return true
+	case "rsync":
+		return true
+	case "sftp":
+		return true
+	case "skype":
+		return true
+	case "smtp":
+		return true
+	case "snmp":
+		return true
+	case "soap":
+		return true
+	case "ssh":
+		return true
+	case "steam":
+		return true
+	case "svn":
+		return true
+	case "tcp":
+		return true
+	case "telnet":
+		return true
+	case "udp":
+		return true
+	case "vnc":
+		return true
+	case "wais":
+		return true
+	case "ws":
+		return true
+	case "wss":
+		return true
+	}
+
+	return false
 }
 
 // URI represents a general RFC3986 specified URI.
@@ -434,7 +472,7 @@ func (a authorityInfo) Validate(schemes ...string) error {
 				return ErrInvalidHost
 			}
 			for _, scheme := range schemes {
-				if _, ok := SchemesWithDNSHost[scheme]; ok {
+				if UsesDNSHostValidation(scheme) {
 					// DNS name
 					isHost = rexHostname.MatchString(unescapedHost)
 				} else {
