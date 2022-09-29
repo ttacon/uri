@@ -1,3 +1,15 @@
+// Package uri is meant to be an RFC 3986 compliant URI builder and parser.
+//
+// This is based on the work from ttacon/uri (credits: Trey Tacon).
+//
+// This fork concentrates on RFC 3986 strictness for URI parsing and validation.
+//
+// Reference: https://tools.ietf.org/html/rfc3986
+//
+// Tests have been augmented with test suites of URI validators in other languages:
+// perl, python, scala, .Net.
+//
+// Extra features like MySQL URIs present in the original repo have been removed.
 package uri
 
 import (
@@ -29,46 +41,41 @@ var (
 // DNS hostname instead.
 //
 // See: https://www.iana.org/assignments/uri-schemes/uri-schemes.xhtml
-//
-var SchemesWithDNSHost map[string]bool
-
-func init() {
-	SchemesWithDNSHost = map[string]bool{
-		"dns":      true,
-		"dntp":     true,
-		"finger":   true,
-		"ftp":      true,
-		"git":      true,
-		"http":     true,
-		"https":    true,
-		"imap":     true,
-		"irc":      true,
-		"jms":      true,
-		"mailto":   true,
-		"nfs":      true,
-		"nntp":     true,
-		"ntp":      true,
-		"postgres": true,
-		"redis":    true,
-		"rmi":      true,
-		"rtsp":     true,
-		"rsync":    true,
-		"sftp":     true,
-		"skype":    true,
-		"smtp":     true,
-		"snmp":     true,
-		"soap":     true,
-		"ssh":      true,
-		"steam":    true,
-		"svn":      true,
-		"tcp":      true,
-		"telnet":   true,
-		"udp":      true,
-		"vnc":      true,
-		"wais":     true,
-		"ws":       true,
-		"wss":      true,
-	}
+var SchemesWithDNSHost = map[string]bool{
+	"dns":      true,
+	"dntp":     true,
+	"finger":   true,
+	"ftp":      true,
+	"git":      true,
+	"http":     true,
+	"https":    true,
+	"imap":     true,
+	"irc":      true,
+	"jms":      true,
+	"mailto":   true,
+	"nfs":      true,
+	"nntp":     true,
+	"ntp":      true,
+	"postgres": true,
+	"redis":    true,
+	"rmi":      true,
+	"rtsp":     true,
+	"rsync":    true,
+	"sftp":     true,
+	"skype":    true,
+	"smtp":     true,
+	"snmp":     true,
+	"soap":     true,
+	"ssh":      true,
+	"steam":    true,
+	"svn":      true,
+	"tcp":      true,
+	"telnet":   true,
+	"udp":      true,
+	"vnc":      true,
+	"wais":     true,
+	"ws":       true,
+	"wss":      true,
 }
 
 // URI represents a general RFC3986 specified URI.
@@ -362,10 +369,7 @@ func (u *uri) Validate() error {
 	}
 	if u.hierPart != "" {
 		if u.authority != nil {
-			a := u.Authority()
-			if a != nil {
-				return a.Validate(u.scheme)
-			}
+			return u.Authority().Validate(u.scheme)
 		}
 	}
 	// empty hierpart case
@@ -430,7 +434,7 @@ func (a authorityInfo) Validate(schemes ...string) error {
 				return ErrInvalidHost
 			}
 			for _, scheme := range schemes {
-				if SchemesWithDNSHost[scheme] {
+				if _, ok := SchemesWithDNSHost[scheme]; ok {
 					// DNS name
 					isHost = rexHostname.MatchString(unescapedHost)
 				} else {
