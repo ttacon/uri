@@ -380,9 +380,7 @@ var (
 
 func isNumerical(input string) bool {
 	return strings.IndexFunc(input,
-		func(r rune) bool {
-			return r < '0' || r > '9'
-		},
+		func(r rune) bool { return r < '0' || r > '9' },
 	) == -1
 }
 
