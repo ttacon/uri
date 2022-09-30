@@ -376,8 +376,15 @@ var (
 	rexUserInfo = regexp.MustCompile(`^([\p{L}\d\-\._~\:!\$\&'\(\)\*\+,;=\?/]|(%[[:xdigit:]]{2})+)+$`)
 
 	rexIPv6Zone = regexp.MustCompile(`:[^%:]+%25(([\p{L}\d\-\._~\:@!\$\&'\(\)\*\+,;=]|(%[[:xdigit:]]{2}))+)?$`)
-	rexPort     = regexp.MustCompile(`^\d+$`)
 )
+
+func isNumerical(input string) bool {
+	return strings.IndexFunc(input,
+		func(r rune) bool {
+			return r < '0' || r > '9'
+		},
+	) == -1
+}
 
 // Validate checks that all parts of a URI abide by allowed characters
 func (u *uri) Validate() error {
@@ -478,7 +485,7 @@ func (a authorityInfo) Validate(schemes ...string) error {
 	}
 
 	if a.port != "" {
-		if ok := rexPort.MatchString(a.port); !ok {
+		if !isNumerical(a.port) {
 			return ErrInvalidPort
 		}
 		if a.host == "" {
