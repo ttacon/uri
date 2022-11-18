@@ -342,10 +342,9 @@ func TestMoreURI(t *testing.T) {
 		"",
 		"foo",
 		"foo@bar",
-		"http://<foo>",      // illegal characters
-		"://bob/",           // empty scheme
-		"1http://bob",       // bad scheme
-		"http:////foo.html", // bad path
+		"http://<foo>", // illegal characters
+		"://bob/",      // empty scheme
+		"1http://bob",  // bad scheme
 		"http://example.w3.org/%illegal.html",
 		"http://example.w3.org/%a",     // partial escape
 		"http://example.w3.org/%a/foo", // partial escape
@@ -367,9 +366,21 @@ func TestMoreURI(t *testing.T) {
 		"http://www.example.org/hello/world.txt/?id=5&pa{}rt=three#there-you-go", // invalid char in query
 		"http://www.example.org/hello/world.txt/?id=5&part=three#there-you-go{}", // invalid char in fragment
 		"scheme://user:passwd@[]/invalid",                                        // empty IPV6
+
+		// invalid fragment
+		"http://example.w3.org/legit#ill[egal",
+
+		// pathological input
+		"?//x",
+		"#//x",
+		"://x",
+
+		// trailing empty fragment, invalid path
+		"http://example.w3.org/%legit#",
 	}
 
 	validURIs := []string{
+		"http:////foo.html", // empty host, correct path (see issue#3)
 		"urn://example-bin.org/path",
 		"https://example-bin.org/path",
 		"https://example-bin.org/path?",
@@ -418,12 +429,17 @@ func TestMoreURI(t *testing.T) {
 		"http://www.example.org/hello/world.txt/?id=5&part=three",
 		"http://www.example.org/hello/world.txt/?id=5&part=three#there-you-go",
 		"http://www.example.org/hello/world.txt/#here-we-are",
+
+		// trailing empty fragment: legit
+		"http://example.w3.org/legit#",
 	}
 
 	t.Run("with invalid URIs", func(t *testing.T) {
 		t.Parallel()
 
-		for _, invURI := range invalidURIs {
+		for _, toPin := range invalidURIs {
+			invURI := toPin
+
 			t.Run(fmt.Sprintf("should be invalid: %q", invURI), func(t *testing.T) {
 				t.Parallel()
 
@@ -437,7 +453,9 @@ func TestMoreURI(t *testing.T) {
 	t.Run("with valid URIs", func(t *testing.T) {
 		t.Parallel()
 
-		for _, validURI := range validURIs {
+		for _, toPin := range validURIs {
+			validURI := toPin
+
 			t.Run(fmt.Sprintf("should be valid: %q", validURI), func(t *testing.T) {
 				t.Parallel()
 
@@ -690,7 +708,9 @@ func Test_Relative(t *testing.T) {
 		"//host.domain.com:8080/a/b",
 	}
 
-	for _, invalidURIref := range invalidURIrefs {
+	for _, toPin := range invalidURIrefs {
+		invalidURIref := toPin
+
 		t.Run(fmt.Sprintf("with invalid URI %q", invalidURIref), func(t *testing.T) {
 			t.Parallel()
 
@@ -832,4 +852,59 @@ func Test_Issue3(t *testing.T) {
 		require.Equal(t, "/etc/hosts", auth.Path())
 		require.Empty(t, auth.Host())
 	})
+
+	t.Run("should detect a path starting with several /'s", func(t *testing.T) {
+		u, err := Parse("file:////etc/hosts")
+		require.NoError(t, err)
+		auth := u.Authority()
+		require.Equal(t, "//etc/hosts", auth.Path())
+		require.Empty(t, auth.Host())
+	})
+}
+
+func TestDNSvsHost(t *testing.T) {
+	for _, scheme := range schemesWithDNS() {
+		require.True(t, UsesDNSHostValidation(scheme))
+	}
+
+	require.False(t, UsesDNSHostValidation("phone"))
+}
+
+func schemesWithDNS() []string {
+	return []string{
+		"dns",
+		"dntp",
+		"finger",
+		"ftp",
+		"git",
+		"http",
+		"https",
+		"imap",
+		"irc",
+		"jms",
+		"mailto",
+		"nfs",
+		"nntp",
+		"ntp",
+		"postgres",
+		"redis",
+		"rmi",
+		"rtsp",
+		"rsync",
+		"sftp",
+		"skype",
+		"smtp",
+		"snmp",
+		"soap",
+		"ssh",
+		"steam",
+		"svn",
+		"tcp",
+		"telnet",
+		"udp",
+		"vnc",
+		"wais",
+		"ws",
+		"wss",
+	}
 }
