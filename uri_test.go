@@ -10,11 +10,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type uriTest struct {
-	uriRaw string
-	uri    *uri
-	err    error
-}
+type (
+	uriTest struct {
+		uriRaw string
+		uri    *uri
+		err    error
+	}
+
+	urlTest struct {
+		url                    string
+		expectedValid          bool
+		expectedValidReference bool
+	}
+)
 
 func Test_rawURIParse(t *testing.T) {
 	t.Parallel()
@@ -334,10 +342,9 @@ func TestMoreURI(t *testing.T) {
 		"",
 		"foo",
 		"foo@bar",
-		"http://<foo>",      // illegal characters
-		"://bob/",           // empty scheme
-		"1http://bob",       // bad scheme
-		"http:////foo.html", // bad path
+		"http://<foo>", // illegal characters
+		"://bob/",      // empty scheme
+		"1http://bob",  // bad scheme
 		"http://example.w3.org/%illegal.html",
 		"http://example.w3.org/%a",     // partial escape
 		"http://example.w3.org/%a/foo", // partial escape
@@ -359,9 +366,21 @@ func TestMoreURI(t *testing.T) {
 		"http://www.example.org/hello/world.txt/?id=5&pa{}rt=three#there-you-go", // invalid char in query
 		"http://www.example.org/hello/world.txt/?id=5&part=three#there-you-go{}", // invalid char in fragment
 		"scheme://user:passwd@[]/invalid",                                        // empty IPV6
+
+		// invalid fragment
+		"http://example.w3.org/legit#ill[egal",
+
+		// pathological input
+		"?//x",
+		"#//x",
+		"://x",
+
+		// trailing empty fragment, invalid path
+		"http://example.w3.org/%legit#",
 	}
 
 	validURIs := []string{
+		"http:////foo.html", // empty host, correct path (see issue#3)
 		"urn://example-bin.org/path",
 		"https://example-bin.org/path",
 		"https://example-bin.org/path?",
@@ -410,12 +429,17 @@ func TestMoreURI(t *testing.T) {
 		"http://www.example.org/hello/world.txt/?id=5&part=three",
 		"http://www.example.org/hello/world.txt/?id=5&part=three#there-you-go",
 		"http://www.example.org/hello/world.txt/#here-we-are",
+
+		// trailing empty fragment: legit
+		"http://example.w3.org/legit#",
 	}
 
 	t.Run("with invalid URIs", func(t *testing.T) {
 		t.Parallel()
 
-		for _, invURI := range invalidURIs {
+		for _, toPin := range invalidURIs {
+			invURI := toPin
+
 			t.Run(fmt.Sprintf("should be invalid: %q", invURI), func(t *testing.T) {
 				t.Parallel()
 
@@ -429,7 +453,9 @@ func TestMoreURI(t *testing.T) {
 	t.Run("with valid URIs", func(t *testing.T) {
 		t.Parallel()
 
-		for _, validURI := range validURIs {
+		for _, toPin := range validURIs {
+			validURI := toPin
+
 			t.Run(fmt.Sprintf("should be valid: %q", validURI), func(t *testing.T) {
 				t.Parallel()
 
@@ -621,26 +647,28 @@ func Test_MoreParse(t *testing.T) {
 func Test_Edge(t *testing.T) {
 	t.Parallel()
 
-	t.Run("", func(t *testing.T) {
+	t.Run("with scheme only", func(t *testing.T) {
 		u, err := Parse("https:")
 		require.NoError(t, err)
 		assert.Equal(t, "https", u.Scheme())
 	})
 
-	t.Run("", func(t *testing.T) {
+	t.Run("should detect invalid scheme", func(t *testing.T) {
 		_, err := Parse("ht?tps:")
 		require.Error(t, err)
 	})
 
-	t.Run("", func(t *testing.T) {
+	t.Run("should parse IPv6 host", func(t *testing.T) {
 		u, err := Parse("https://user:passwd@[21DA:00D3:0000:2F3B:02AA:00FF:FE28:9C5A%25]:8080/a?query=value#fragment")
 		require.NoError(t, err)
+
 		assert.Equal(t, "21DA:00D3:0000:2F3B:02AA:00FF:FE28:9C5A%25", u.Authority().Host())
 	})
 
-	t.Run("", func(t *testing.T) {
+	t.Run("should parse user/password, IPv6 percent-encoded host", func(t *testing.T) {
 		u, err := Parse("https://user:passwd@[::1%25lo]:8080/a?query=value#fragment")
 		require.NoError(t, err)
+
 		assert.Equal(t, "https", u.Scheme())
 		assert.Equal(t, "8080", u.Authority().Port())
 		assert.Equal(t, "user:passwd", u.Authority().UserInfo())
@@ -653,16 +681,20 @@ func Test_Edge(t *testing.T) {
 
 	t.Run("percent encoded host", func(t *testing.T) {
 		_, err := Parse("urn://user:passwd@ex%7Cample.com:8080/a?query=value#fragment")
-		require.Errorf(t, err, "expected uri with percent encoded host to be invalid")
+		require.Errorf(t, err,
+			"expected uri with percent-encoded host to be invalid",
+		)
 
 		u, err := Parse("urn://user:passwd@ex%2Dample.com:8080/a?query=value#fragment")
-		require.NoErrorf(t, err, "expected uri with percent encoded host to be valid")
+		require.NoErrorf(t, err,
+			"expected uri with percent-encoded host to be valid",
+		)
 		assert.Equal(t, "ex%2Dample.com", u.Authority().Host())
 	})
 
 	t.Run("check percent encoding with DNS hostname", func(t *testing.T) {
 		u, err := Parse("https://user:passwd@ex%2Dample.com:8080/a?query=value#fragment")
-		require.NoErrorf(t, err, "expected uri with percent encoded host to be valid")
+		require.NoErrorf(t, err, "expected uri with percent-encoded host to be valid")
 		assert.Equal(t, "ex%2Dample.com", u.Authority().Host())
 	})
 }
@@ -676,7 +708,9 @@ func Test_Relative(t *testing.T) {
 		"//host.domain.com:8080/a/b",
 	}
 
-	for _, invalidURIref := range invalidURIrefs {
+	for _, toPin := range invalidURIrefs {
+		invalidURIref := toPin
+
 		t.Run(fmt.Sprintf("with invalid URI %q", invalidURIref), func(t *testing.T) {
 			t.Parallel()
 
@@ -738,11 +772,43 @@ const pathThatLooksSchemeRelative = "//not.a.user@not.a.host/just/a/path"
 func Test_URL(t *testing.T) {
 	t.Parallel()
 
-	parseRequestURLTests := []struct {
-		url                    string
-		expectedValid          bool
-		expectedValidReference bool
-	}{
+	t.Run("with URL input", func(t *testing.T) {
+		for _, toPin := range parseRequestURLTests() {
+			test := toPin
+
+			t.Run(fmt.Sprintf("should parse %q", test.url), func(t *testing.T) {
+				_, err := Parse(test.url)
+				if !test.expectedValid {
+					require.Errorf(t, err,
+						"parse(%q) gave nil error; want some error", test.url,
+					)
+
+					return
+				}
+
+				require.NoErrorf(t, err,
+					"parse(%q) gave err %v; want no error", test.url, err,
+				)
+
+				isRef := IsURIReference(test.url)
+				assert.Equalf(t, test.expectedValidReference, isRef,
+					"IsURIReference(%q) returned %t; want %t", test.url, isRef, test.expectedValidReference,
+				)
+			})
+		}
+	})
+
+	t.Run("with invalid URI which is a valid reference", func(t *testing.T) {
+		_, err := Parse(pathThatLooksSchemeRelative)
+		assert.Error(t, err)
+
+		_, err = ParseReference(pathThatLooksSchemeRelative)
+		assert.NoError(t, err)
+	})
+}
+
+func parseRequestURLTests() []urlTest {
+	return []urlTest{
 		{"http://foo.com", true, true},
 		{"http://foo.com/", true, true},
 		{"http://foo.com/path", true, true},
@@ -776,24 +842,6 @@ func Test_URL(t *testing.T) {
 		// Added this
 		{"", false, true},
 	}
-
-	for _, test := range parseRequestURLTests {
-		_, err := Parse(test.url)
-		switch {
-		case test.expectedValid && err != nil:
-			t.Errorf("Parse(%q) gave err %v; want no error", test.url, err)
-		case !test.expectedValid && err == nil:
-			t.Errorf("Parse(%q) gave nil error; want some error", test.url)
-		}
-		isRef := IsURIReference(test.url)
-		assert.Equalf(t, test.expectedValidReference, isRef, "IsURIReference(%q) gave returned %t; want %t", test.url, isRef, test.expectedValidReference)
-	}
-
-	_, err := Parse(pathThatLooksSchemeRelative)
-	assert.Error(t, err)
-
-	_, err = ParseReference(pathThatLooksSchemeRelative)
-	assert.NoError(t, err)
 }
 
 func Test_Issue3(t *testing.T) {
@@ -804,4 +852,59 @@ func Test_Issue3(t *testing.T) {
 		require.Equal(t, "/etc/hosts", auth.Path())
 		require.Empty(t, auth.Host())
 	})
+
+	t.Run("should detect a path starting with several /'s", func(t *testing.T) {
+		u, err := Parse("file:////etc/hosts")
+		require.NoError(t, err)
+		auth := u.Authority()
+		require.Equal(t, "//etc/hosts", auth.Path())
+		require.Empty(t, auth.Host())
+	})
+}
+
+func TestDNSvsHost(t *testing.T) {
+	for _, scheme := range schemesWithDNS() {
+		require.True(t, UsesDNSHostValidation(scheme))
+	}
+
+	require.False(t, UsesDNSHostValidation("phone"))
+}
+
+func schemesWithDNS() []string {
+	return []string{
+		"dns",
+		"dntp",
+		"finger",
+		"ftp",
+		"git",
+		"http",
+		"https",
+		"imap",
+		"irc",
+		"jms",
+		"mailto",
+		"nfs",
+		"nntp",
+		"ntp",
+		"postgres",
+		"redis",
+		"rmi",
+		"rtsp",
+		"rsync",
+		"sftp",
+		"skype",
+		"smtp",
+		"snmp",
+		"soap",
+		"ssh",
+		"steam",
+		"svn",
+		"tcp",
+		"telnet",
+		"udp",
+		"vnc",
+		"wais",
+		"ws",
+		"wss",
+	}
 }
