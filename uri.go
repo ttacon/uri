@@ -534,8 +534,8 @@ func parseAuthority(hier string) (*authorityInfo, error) {
 			// ipv6 addresses: "[" xx:yy:zz "]":port
 			rawHost := host
 			closingbracket := strings.IndexByte(host, ']')
-			if closingbracket > 0 {
-				host = host[bracket+1 : closingbracket-bracket]
+			if closingbracket > bracket+1 {
+				host = host[bracket+1 : closingbracket]
 				rawHost = rawHost[closingbracket+1:]
 			} else {
 				return nil, ErrInvalidURI

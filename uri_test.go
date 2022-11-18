@@ -305,6 +305,7 @@ func TestMoreURI(t *testing.T) {
 		"inv;alidscheme://www.example.com",
 		"http://www.example.org/hello/world.txt/?id=5&pa{}rt=three#there-you-go", // invalid char in query
 		"http://www.example.org/hello/world.txt/?id=5&part=three#there-you-go{}", // invalid char in fragment
+		"scheme://user:passwd@[]/invalid",                                        // empty IPV6
 	}
 	validURIs := []string{
 		"urn://example-bin.org/path",
