@@ -10,11 +10,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type uriTest struct {
-	uriRaw string
-	uri    *uri
-	err    error
-}
+type (
+	uriTest struct {
+		uriRaw string
+		uri    *uri
+		err    error
+	}
+
+	urlTest struct {
+		url                    string
+		expectedValid          bool
+		expectedValidReference bool
+	}
+)
 
 func Test_rawURIParse(t *testing.T) {
 	t.Parallel()
@@ -738,11 +746,43 @@ const pathThatLooksSchemeRelative = "//not.a.user@not.a.host/just/a/path"
 func Test_URL(t *testing.T) {
 	t.Parallel()
 
-	parseRequestURLTests := []struct {
-		url                    string
-		expectedValid          bool
-		expectedValidReference bool
-	}{
+	t.Run("with URL input", func(t *testing.T) {
+		for _, toPin := range parseRequestURLTests() {
+			test := toPin
+
+			t.Run(fmt.Sprintf("should parse %q", test.url), func(t *testing.T) {
+				_, err := Parse(test.url)
+				if !test.expectedValid {
+					require.Errorf(t, err,
+						"parse(%q) gave nil error; want some error", test.url,
+					)
+
+					return
+				}
+
+				require.NoErrorf(t, err,
+					"parse(%q) gave err %v; want no error", test.url, err,
+				)
+
+				isRef := IsURIReference(test.url)
+				assert.Equalf(t, test.expectedValidReference, isRef,
+					"IsURIReference(%q) returned %t; want %t", test.url, isRef, test.expectedValidReference,
+				)
+			})
+		}
+	})
+
+	t.Run("with invalid URI which is a valid reference", func(t *testing.T) {
+		_, err := Parse(pathThatLooksSchemeRelative)
+		assert.Error(t, err)
+
+		_, err = ParseReference(pathThatLooksSchemeRelative)
+		assert.NoError(t, err)
+	})
+}
+
+func parseRequestURLTests() []urlTest {
+	return []urlTest{
 		{"http://foo.com", true, true},
 		{"http://foo.com/", true, true},
 		{"http://foo.com/path", true, true},
@@ -776,24 +816,6 @@ func Test_URL(t *testing.T) {
 		// Added this
 		{"", false, true},
 	}
-
-	for _, test := range parseRequestURLTests {
-		_, err := Parse(test.url)
-		switch {
-		case test.expectedValid && err != nil:
-			t.Errorf("Parse(%q) gave err %v; want no error", test.url, err)
-		case !test.expectedValid && err == nil:
-			t.Errorf("Parse(%q) gave nil error; want some error", test.url)
-		}
-		isRef := IsURIReference(test.url)
-		assert.Equalf(t, test.expectedValidReference, isRef, "IsURIReference(%q) gave returned %t; want %t", test.url, isRef, test.expectedValidReference)
-	}
-
-	_, err := Parse(pathThatLooksSchemeRelative)
-	assert.Error(t, err)
-
-	_, err = ParseReference(pathThatLooksSchemeRelative)
-	assert.NoError(t, err)
 }
 
 func Test_Issue3(t *testing.T) {
