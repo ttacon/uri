@@ -1,7 +1,7 @@
 # uri
 ![Lint](https://github.com/fredbi/uri/actions/workflows/01-golang-lint.yaml/badge.svg)
 ![CI](https://github.com/fredbi/uri/actions/workflows/02-test.yaml/badge.svg)
-[![Coverage Status](https://coveralls.io/repos/github/fredbi/uri/badge.svg)](https://coveralls.io/github/fredbi/uri)
+[![Coverage Status](https://coveralls.io/repos/github/fredbi/uri/badge.svg?branch=master)](https://coveralls.io/github/fredbi/uri?branch=master)
 ![GitHub tag (latest by date)](https://img.shields.io/github/v/tag/fredbi/uri)
 [![Go Reference](https://pkg.go.dev/badge/github.com/fredbi/uri.svg)](https://pkg.go.dev/github.com/fredbi/uri)
 [![license](http://img.shields.io/badge/license/License-MIT-yellow.svg)](https://raw.githubusercontent.com/fredbi/uri/master/LICENSE.md)
