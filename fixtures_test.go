@@ -469,6 +469,24 @@ func rawParseHostTests() []uriTest {
 			},
 		},
 		{
+			comment: "percent encoded host is valid, with encoded character not being valid",
+			uriRaw:  "urn://user:passwd@ex%7Cample.com:8080/a?query=value#fragment",
+		},
+		{
+			comment: "valid percent-encoded host (dash character is allowed in registered name)",
+			uriRaw:  "urn://user:passwd@ex%2Dample.com:8080/a?query=value#fragment",
+			asserter: func(t testing.TB, u URI) {
+				assert.Equal(t, "ex%2Dample.com", u.Authority().Host())
+			},
+		},
+		{
+			comment: "check percent encoding with DNS hostname, dash allowed in DNS name",
+			uriRaw:  "https://user:passwd@ex%2Dample.com:8080/a?query=value#fragment",
+			asserter: func(t testing.TB, u URI) {
+				assert.Equal(t, "ex%2Dample.com", u.Authority().Host())
+			},
+		},
+		{
 			comment: "should error on empty host",
 			uriRaw:  "https://user:passwd@:8080/a?query=value#fragment",
 			err:     ErrMissingHost,
@@ -516,6 +534,11 @@ func rawParseHostTests() []uriTest {
 			err:     ErrInvalidDNSName,
 		},
 		{
+			comment: "DNS last segment in hostname is empty",
+			uriRaw:  "https://seg.empty.com./",
+			err:     ErrInvalidDNSName,
+		},
+		{
 			comment: "DNS segment ends with unallowed character",
 			uriRaw:  "https://x-.y.com/",
 			err:     ErrInvalidDNSName,
@@ -523,6 +546,11 @@ func rawParseHostTests() []uriTest {
 		{
 			comment: "DNS segment in hostname too long",
 			uriRaw:  fmt.Sprintf("https://%s.%s.com/", strings.Repeat("x", 63), strings.Repeat("y", 64)),
+			err:     ErrInvalidDNSName,
+		},
+		{
+			comment: "DNS with all segments empty",
+			uriRaw:  "https://........./",
 			err:     ErrInvalidDNSName,
 		},
 	}
@@ -592,34 +620,61 @@ func rawParseIPHostTests() []uriTest {
 		},
 		{
 			comment: "IPv6 host with percent-encoded+unreserved zone identifier",
-			uriRaw:  "http://[fe80::1%25%65%6e%301-._~]:8080/"},
-		// percent encoding in IP addresses
+			uriRaw:  "http://[fe80::1%25%65%6e%301-._~]:8080/",
+		},
+		{
+			// TODO: should fail (invalid UTF8 escape sequence)
+			comment: "IPv6 host with invalid percent-encoding in zone identifier",
+			uriRaw:  "http://[fe80::1%25%C3~]:8080/",
+		},
 		{
 			comment: "IP v4 host (escaped) %31 is percent-encoded for '1'",
 			uriRaw:  "http://192.168.0.%31/",
+			err:     ErrInvalidHost,
 		},
 		{
-			comment: "URL is an URI",
+			comment: "IPv4 address with percent-encoding is not allowed",
 			uriRaw:  "http://192.168.0.%31:8080/",
+			err:     ErrInvalidHost,
 		},
 		{
-			comment: "URL is an URI",
+			comment: "invalid IPv4 with port (2)",
+			uriRaw:  "https://user:passwd@127.256.0.1:8080/a?query=value#fragment",
+			err:     ErrInvalidHost,
+		},
+		{
+			comment: "invalid IPv4 with port (3)",
+			uriRaw:  "https://user:passwd@127.0127.0.1:8080/a?query=value#fragment",
+			err:     ErrInvalidHost,
+		},
+		{
+			comment: "valid IPv4 with port (1)",
+			uriRaw:  "https://user:passwd@127.0.0.1:8080/a?query=value#fragment",
+		},
+		{
+			comment: "invalid IPv4: part>255",
+			uriRaw:  "https://user:passwd@256.256.256.256:8080/a?query=value#fragment",
+			err:     ErrInvalidHost,
+		},
+		{
+			comment: "IPv6 percent-encoding is limited to ZoneID specification, mus be %25",
 			uriRaw:  "http://[fe80::%31]/",
+			err:     ErrInvalidHostAddress,
 		},
 		{
-			comment: "URL is an URI",
+			comment: "IPv6 percent-encoding is limited to ZoneID specification, mus be %25 (2))",
 			uriRaw:  "http://[fe80::%31]:8080/",
+			err:     ErrInvalidHostAddress,
 		},
 		{
-			comment: "URL is an URI",
+			comment: "IPv6 percent-encoding is limited to ZoneID specification, mus be %25 (2))",
 			uriRaw:  "http://[fe80::%31%25en0]/",
+			err:     ErrInvalidHostAddress,
 		},
 		{
-			comment: "URL is an URI",
-			uriRaw:  "http://[fe80::%31%25en0]:8080/",
-		},
-		{
-			uriRaw: "https://user:passwd@127.0.0.1:8080/a?query=value#fragment",
+			comment: "IPv6 percent-encoding is limited to ZoneID specification, mus be %25 (2))",
+			uriRaw:  "http://[%310:fe80::%25en0]/",
+			err:     ErrInvalidHostAddress,
 		},
 		{
 			uriRaw: "https://user:passwd@[FF02:30:0:0:0:0:0:5%25en0]:8080/a?query=value#fragment",
@@ -630,17 +685,17 @@ func rawParseIPHostTests() []uriTest {
 		{
 			comment: "IPv6 with wrong percent encoding",
 			uriRaw:  "http://[fe80::%%31]:8080/",
-			err:     ErrInvalidHost,
+			err:     ErrInvalidHostAddress,
+		},
+		{
+			comment: "IPv6 with wrong percent encoding",
+			uriRaw:  "http://[fe80::%26lo]:8080/",
+			err:     ErrInvalidHostAddress,
 		},
 		// These two cases are valid as textual representations as
 		// described in RFC 4007, but are not valid as address
 		// literals with IPv6 zone identifiers in URIs as described in
 		// RFC 6874.
-		{
-			comment: "invalid IPv4: part>255",
-			uriRaw:  "https://user:passwd@256.256.256.256:8080/a?query=value#fragment",
-			err:     ErrInvalidHost,
-		},
 		{
 			comment: "invalid IPv6 (double empty ::)",
 			uriRaw:  "https://user:passwd@[FF02::3::5]:8080/a?query=value#fragment",
@@ -654,12 +709,12 @@ func rawParseIPHostTests() []uriTest {
 		{
 			comment: "invalid IPv6 with unescaped zone (bad percent-encoding)",
 			uriRaw:  "https://user:passwd@[FADF:01%en0]:8080/a?query=value#fragment",
-			err:     ErrInvalidHost,
+			err:     ErrInvalidHostAddress,
 		},
 		{
 			comment: "should not parse IPv6 host with empty zone (bad percent encoding)",
 			uriRaw:  "https://user:passwd@[21DA:00D3:0000:2F3B:02AA:00FF:FE28:9C5A%]:8080/a?query=value#fragment",
-			err:     ErrInvalidHost,
+			err:     ErrInvalidHostAddress,
 		},
 		{
 			comment: "empty IPv6",
@@ -668,9 +723,7 @@ func rawParseIPHostTests() []uriTest {
 		},
 		{
 			comment: "zero IPv6",
-			// this is valid according to
-			uriRaw: "scheme://user:passwd@[::]/valid",
-			//err:     ErrInvalidURI,
+			uriRaw:  "scheme://user:passwd@[::]/valid",
 		},
 		{
 			comment: "invalid IPv6 (lack closing bracket) (1)",
@@ -713,9 +766,14 @@ func rawParseIPHostTests() []uriTest {
 			err:     ErrInvalidHostAddress,
 		},
 		{
+			comment: "IPv6 unescaped zone with reserved characters",
+			uriRaw:  "https://user:passwd@[FF02:30:0:0:0:0:0:5%25:lo]:8080/a?query=value#fragment",
+			err:     ErrInvalidHostAddress,
+		},
+		{
 			comment: "IPv6 addresses not between square brackets are invalid hosts (1)",
 			uriRaw:  "https://0%3A0%3A0%3A0%3A0%3A0%3A0%3A1/a",
-			err:     ErrInvalidHostAddress,
+			err:     ErrInvalidHost,
 		},
 		{
 			comment: "IPv6 addresses not between square brackets are invalid hosts (2)",
@@ -726,24 +784,6 @@ func rawParseIPHostTests() []uriTest {
 			comment: "IP addresses between square brackets should not be ipv4 addresses",
 			uriRaw:  "https://[192.169.224.1]/a",
 			err:     ErrInvalidHostAddress,
-		},
-		{
-			comment: "percent encoded host is valid, with encoded character not being valid",
-			uriRaw:  "urn://user:passwd@ex%7Cample.com:8080/a?query=value#fragment",
-		},
-		{
-			comment: "valid percent-encoded host (dash character is allowed in registered name)",
-			uriRaw:  "urn://user:passwd@ex%2Dample.com:8080/a?query=value#fragment",
-			asserter: func(t testing.TB, u URI) {
-				assert.Equal(t, "ex%2Dample.com", u.Authority().Host())
-			},
-		},
-		{
-			comment: "check percent encoding with DNS hostname, dash allowed in DNS name",
-			uriRaw:  "https://user:passwd@ex%2Dample.com:8080/a?query=value#fragment",
-			asserter: func(t testing.TB, u URI) {
-				assert.Equal(t, "ex%2Dample.com", u.Authority().Host())
-			},
 		},
 		// Just for fun: IPvFuture...
 		{
@@ -774,6 +814,8 @@ func rawParseIPHostTests() []uriTest {
 			uriRaw:  "http://[vAF.{}]",
 			err:     ErrInvalidHostAddress,
 		},
+		// TODO: start with %
+		// TODO: invalid percent-encoded UTF8 sequence in zone
 	}
 }
 
@@ -1126,6 +1168,20 @@ func rawParsePassTests() []uriTest {
 				assert.Equal(t, "user:passwd", u.Authority().UserInfo())
 			},
 		},
+		/* This is an invalid UTF8 sequence that SHOULD error, at least in the context of
+				Ref: https://url.spec.whatwg.org/#percent-encoded-bytes
+		{
+			comment: "check percent encoding with DNS hostname, invalid escape sequence",
+			uriRaw:  "https://user:passwd@ex%C3ample.com:8080/a?query=value#fragment",
+			// ICI
+			// err:     ErrInvalidDNSName,
+		},
+		{
+			comment: "check percent encoding with registered hostname, invalid escape sequence",
+			uriRaw:  "tel://user:passwd@ex%C3ample.com:8080/a?query=value#fragment",
+			err:     ErrInvalidHost,
+		},
+		*/
 	}
 }
 
