@@ -8,6 +8,21 @@ import (
 	"strings"
 )
 
+func (u uri) IsIP() bool {
+	return u.authority.isIPv6 || u.authority.isIPv4
+}
+
+func (u uri) IPAddr() (netip.Addr, bool) {
+	isIP := u.IsIP()
+	if !isIP {
+		return netip.Addr{}, false
+	}
+
+	addr, _ := netip.ParseAddr(u.authority.host)
+
+	return addr, true
+}
+
 func validateIPv4(host string) error {
 	// check for IPv4 address
 	//
@@ -37,61 +52,44 @@ func validateIPv4(host string) error {
 			switch digitNum {
 			case 0:
 				if b > '2' {
-					return errors.Join(ErrInvalidHostAddress,
-						errors.New("invalid IPv4 octet: IP field has value > 255"),
-					)
+					return errValueGreater255
 				}
 			case 1:
 				if currentPart[0] == '2' && b > '5' {
-					return errors.Join(ErrInvalidHostAddress,
-						errors.New("invalid IPv4 octet: IP field has value > 255"),
-					)
+					return errValueGreater255
 				}
 
 			case 2:
 				if currentPart[0] == '2' && currentPart[1] == '5' && b > '5' {
-					return errors.Join(ErrInvalidHostAddress,
-						errors.New("invalid IPv4 octet: IP field has value > 255"),
-					)
+					return errValueGreater255
 				}
 			default:
-				return errors.Join(ErrInvalidHostAddress,
-					errors.New("invalid IPv4 octet: IP field has value > 255"),
-				)
+				return errValueGreater255
 			}
 
 			currentPart[digitNum] = b
 			digitNum++
 		case b == '.':
 			if digitNum == 0 {
-				return errors.Join(ErrInvalidHostAddress,
-					errors.New("IPv4 field must have at least one digit"),
-				)
+				return errAtLeastOneDigit
 			}
 			if digitNum > 1 && currentPart[0] == '0' {
-				return errors.Join(ErrInvalidHostAddress,
-					errors.New("IPv4 field has octet with leading zero"),
-				)
+				return errLeadingZero
 			}
 
 			partNum++
 			if partNum > 3 {
-				return errors.Join(ErrInvalidHostAddress,
-					errors.New("IPv4 address too long"),
-				)
+				return errTooLong
 			}
 			digitNum = 0
 		default:
-			return errors.Join(ErrInvalidHostAddress,
-				errors.New("invalid character in IPv4 literal"),
-			)
+			// optimize the default path to return a value error
+			return errInvalidCharacter
 		}
 	}
 
 	if partNum < 3 {
-		return errors.Join(ErrInvalidHostAddress,
-			errors.New("IPv4 address too short"),
-		)
+		return errTooShort
 	}
 
 	return nil

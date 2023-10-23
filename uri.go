@@ -16,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/netip"
 	"net/url"
 	"strings"
 	"unicode"
@@ -45,6 +46,9 @@ type URI interface {
 
 	// Validate the different components of the URI
 	Validate() error
+
+	IsIP() bool
+	IPAddr() (netip.Addr, bool)
 }
 
 // Authority information that a URI contains
@@ -578,7 +582,7 @@ func (a authorityInfo) validatePath(path string) error {
 // validateHost validates the host part.
 //
 // Reference: https://www.rfc-editor.org/rfc/rfc3986#section-3.2.2
-func (a authorityInfo) validateHost(host string, isIPv6 bool, schemes ...string) error {
+func (a *authorityInfo) validateHost(host string, isIPv6 bool, schemes ...string) error {
 	// check for IP addresses
 	// * IPv6 are required to be enclosed within '[]' (isIPv6=true), if an IPv6 zone is present,
 	// there is a trailing escaped sequence, but the heading IPv6 literal must not be escaped.

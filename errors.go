@@ -22,3 +22,33 @@ var (
 	ErrInvalidRegisteredName = Error(newErr("invalid host (registered name)"))
 	ErrInvalidDNSName        = Error(newErr("invalid host (DNS name)"))
 )
+
+type ipError uint8
+
+const (
+	errInvalidCharacter ipError = iota
+	errValueGreater255
+	errAtLeastOneDigit
+	errLeadingZero
+	errTooLong
+	errTooShort
+)
+
+func (e ipError) Error() string {
+	switch e {
+	case errInvalidCharacter:
+		return "invalid character in IPv4 literal"
+	case errValueGreater255:
+		return "invalid IPv4 octet: IP field has value > 255"
+	case errAtLeastOneDigit:
+		return "IPv4 field must have at least one digit"
+	case errLeadingZero:
+		return "IPv4 field has octet with leading zero"
+	case errTooLong:
+		return "IPv4 address too long"
+	case errTooShort:
+		return "IPv4 address too short"
+	default:
+		return ""
+	}
+}
