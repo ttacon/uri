@@ -59,6 +59,15 @@ type Authority interface {
 	Path() string
 	String() string
 	Validate(...string) error
+
+	IsIP() bool
+	IPAddr() netip.Addr
+}
+
+type ipType struct {
+	isIPv4      bool
+	isIPv6      bool
+	isIPvFuture bool
 }
 
 const (
@@ -180,7 +189,7 @@ func parse(raw string, withURIReference bool) (URI, error) {
 			hierPartEnd = len(raw)
 		}
 
-		authorityInfo, err := parseAuthority(raw[curr:hierPartEnd])
+		authority, err := parseAuthority(raw[curr:hierPartEnd])
 		if err != nil {
 			return nil, errorsJoin(ErrInvalidURI, err)
 		}
@@ -188,7 +197,7 @@ func parse(raw string, withURIReference bool) (URI, error) {
 		u := &uri{
 			scheme:    scheme,
 			hierPart:  raw[curr:hierPartEnd],
-			authority: authorityInfo,
+			authority: authority,
 		}
 
 		return u, u.Validate()
@@ -196,13 +205,13 @@ func parse(raw string, withURIReference bool) (URI, error) {
 
 	var (
 		hierPart, query, fragment string
-		authorityInfo             authorityInfo
+		authority                 authorityInfo
 		err                       error
 	)
 
 	if hierPartEnd > 0 {
 		hierPart = raw[curr:hierPartEnd]
-		authorityInfo, err = parseAuthority(hierPart)
+		authority, err = parseAuthority(hierPart)
 		if err != nil {
 			return nil, errorsJoin(ErrInvalidURI, err)
 		}
@@ -223,7 +232,7 @@ func parse(raw string, withURIReference bool) (URI, error) {
 	if queryEnd == len(raw)-1 && hierPartEnd < 0 {
 		// trailing #,  no query "?"
 		hierPart = raw[curr:queryEnd]
-		authorityInfo, err = parseAuthority(hierPart)
+		authority, err = parseAuthority(hierPart)
 		if err != nil {
 			return nil, errorsJoin(ErrInvalidURI, err)
 		}
@@ -231,7 +240,7 @@ func parse(raw string, withURIReference bool) (URI, error) {
 		u := &uri{
 			scheme:    scheme,
 			hierPart:  hierPart,
-			authority: authorityInfo,
+			authority: authority,
 			query:     query,
 		}
 
@@ -243,7 +252,7 @@ func parse(raw string, withURIReference bool) (URI, error) {
 		if hierPartEnd < 0 {
 			// no query
 			hierPart = raw[curr:queryEnd]
-			authorityInfo, err = parseAuthority(hierPart)
+			authority, err = parseAuthority(hierPart)
 			if err != nil {
 				return nil, errorsJoin(ErrInvalidURI, err)
 			}
@@ -259,7 +268,7 @@ func parse(raw string, withURIReference bool) (URI, error) {
 		hierPart:  hierPart,
 		query:     query,
 		fragment:  fragment,
-		authority: authorityInfo,
+		authority: authority,
 	}
 
 	return u, u.Validate()
@@ -286,7 +295,7 @@ func (u *uri) Scheme() string {
 
 func (u *uri) Authority() Authority {
 	u.ensureAuthorityExists()
-	return u.authority
+	return &u.authority
 }
 
 // Query returns parsed query parameters like standard lib URL.Query().
@@ -299,10 +308,16 @@ func (u *uri) Fragment() string {
 	return u.fragment
 }
 
+func isNotDigit[T rune | byte](r T) bool {
+	return r < '0' || r > '9'
+}
+
+func isDigit[T rune | byte](r T) bool {
+	return r >= '0' && r <= '9'
+}
+
 func isNumerical(input string) bool {
-	return strings.IndexFunc(input,
-		func(r rune) bool { return r < '0' || r > '9' },
-	) == -1
+	return strings.IndexFunc(input, isNotDigit[rune]) == -1
 }
 
 // Validate checks that all parts of a URI abide by allowed characters.
@@ -326,7 +341,11 @@ func (u *uri) Validate() error {
 	}
 
 	if u.hierPart != "" {
-		return u.Authority().Validate(u.scheme)
+		ip, err := u.authority.validate(u.scheme)
+		if err != nil {
+			return err
+		}
+		u.authority.ipType = ip
 	}
 
 	// empty hierpart case
@@ -403,6 +422,7 @@ func validateUnreservedWithExtra(s string, acceptedRunes []rune) error {
 
 		// accepts percent-encoded sequences
 		if r == '%' {
+			// TODO: since this is not escaped, check the validity of the escape sequence
 			if i+2 >= len(s) || !isHex(s[i+1]) || !isHex(s[i+2]) {
 				return fmt.Errorf("part %q contains a malformed percent-encoded part near [%s...]", s, s[:i])
 			}
@@ -442,7 +462,7 @@ func validateUnreservedWithExtra(s string, acceptedRunes []rune) error {
 
 func isHex[T byte | rune](c T) bool {
 	switch {
-	case '0' <= c && c <= '9':
+	case isDigit(c):
 		return true
 	case 'a' <= c && c <= 'f':
 		return true
@@ -452,63 +472,13 @@ func isHex[T byte | rune](c T) bool {
 	return false
 }
 
-// validateIPvFuture covers the special provision in the RFC for future IP scheme.
-// The passed argument removes the heading "v" character.
-//
-// Example: http://[v6.fe80::a_en1]
-//
-//	Reference: https://www.rfc-editor.org/rfc/rfc3986#section-3.2.2
-//
-//	IPvFuture     = "v" 1*HEXDIG "." 1*( unreserved / sub-delims / ":" )
-func validateIPvFuture(address string) error {
-	rr := strings.NewReader(address)
-	var (
-		foundHexDigits, foundDot bool
-	)
-
-	for {
-		r, _, err := rr.ReadRune()
-		if err == io.EOF {
-			break
-		}
-
-		if r == '.' {
-			foundDot = true
-
-			break
-		}
-
-		if !isHex(r) {
-			return errors.New(
-				"invalid IP vFuture format: expect an hexadecimal version tag",
-			)
-		}
-
-		foundHexDigits = true
-	}
-
-	if !foundHexDigits || !foundDot {
-		return errors.New(
-			"invalid IP vFuture format: expect a '.' after an hexadecimal version tag",
-		)
-	}
-
-	if rr.Len() == 0 {
-		return errors.New("invalid IP vFuture format: expect a non-empty address after the version tag")
-	}
-
-	offset, _ := rr.Seek(0, io.SeekCurrent)
-
-	return validateUnreservedWithExtra(address[offset:], userInfoExtraRunes)
-}
-
 type authorityInfo struct {
 	prefix   string
 	userinfo string
 	host     string
 	port     string
 	path     string
-	isIPv6   bool
+	ipType
 }
 
 func (a authorityInfo) UserInfo() string { return a.userinfo }
@@ -543,32 +513,47 @@ func (a authorityInfo) String() string {
 // Validate the Authority part.
 //
 // Reference: https://www.rfc-editor.org/rfc/rfc3986#section-3.2
-func (a authorityInfo) Validate(schemes ...string) error {
+func (a *authorityInfo) Validate(schemes ...string) error {
+	ip, err := a.validate(schemes...)
+
+	if err != nil {
+		return err
+	}
+	a.ipType = ip
+
+	return nil
+}
+
+func (a authorityInfo) validate(schemes ...string) (ipType, error) {
+	var ip ipType
+
 	if a.path != "" {
 		if err := a.validatePath(a.path); err != nil {
-			return err
+			return ip, err
 		}
 	}
 
 	if a.host != "" {
-		if err := a.validateHost(a.host, a.isIPv6, schemes...); err != nil {
-			return err
+		var err error
+		ip, err = a.validateHost(a.host, a.isIPv6, schemes...)
+		if err != nil {
+			return ip, err
 		}
 	}
 
 	if a.port != "" {
 		if err := a.validatePort(a.port, a.host); err != nil {
-			return err
+			return ip, err
 		}
 	}
 
 	if a.userinfo != "" {
 		if err := a.validateUserInfo(a.userinfo); err != nil {
-			return err
+			return ip, err
 		}
 	}
 
-	return nil
+	return ip, nil
 }
 
 // validatePath validates the path part.
@@ -621,96 +606,43 @@ func (a authorityInfo) validatePath(path string) error {
 // validateHost validates the host part.
 //
 // Reference: https://www.rfc-editor.org/rfc/rfc3986#section-3.2.2
-func (a authorityInfo) validateHost(host string, isIPv6 bool, schemes ...string) error {
-	var unescapedHost string
-
-	if strings.ContainsRune(host, '%') {
-		// only proceed with PathUnescape if we need to (saves an alloc otherwise)
-		var err error
-		unescapedHost, err = url.PathUnescape(host)
-		if err != nil {
-			return errorsJoin(
-				ErrInvalidHost,
-				fmt.Errorf("invalid percent-encoding in the host part"),
-			)
-		}
-	} else {
-		unescapedHost = host
-	}
-
+func (a authorityInfo) validateHost(host string, isIPv6 bool, schemes ...string) (ipType, error) {
+	// check for IP addresses
+	// * IPv6 are required to be enclosed within '[]' (isIPv6=true), if an IPv6 zone is present,
+	// there is a trailing escaped sequence, but the heading IPv6 literal must not be escaped.
+	// * IPv4 are not percent-escaped: strict addresses never contain parts starting a zero (e.g. 012 should be 12).
+	// * address the provision made in the RFC for a "IPvFuture"
 	if isIPv6 {
-		return validateIPv6(unescapedHost)
-	}
+		if host[0] == 'v' || host[0] == 'V' {
+			if err := validateIPvFuture(host[1:]); err != nil {
+				return ipType{}, errorsJoin(
+					ErrInvalidHostAddress,
+					err,
+				)
+			}
+			// IPvFuture won't parse as a netip.Addr
 
-	// check for IPv4 address
-	//
-	// The host SHOULD check
-	// the string syntactically for a dotted-decimal number before
-	// looking it up in the Domain Name System.
-
-	// IPv4 may contain percent-encoded escaped characters, e.g. 192.168.0.%31 is valid.
-	// Reference: https://www.rfc-editor.org/rfc/rfc3986#appendix-A
-	//
-	//  IPv4address   = dec-octet "." dec-octet "." dec-octet "." dec-octet
-	//  dec-octet     = DIGIT                 ; 0-9
-	//    / %x31-39 DIGIT         ; 10-99
-	//    / "1" 2DIGIT            ; 100-199
-	//    / "2" %x30-34 DIGIT     ; 200-249
-	//    / "25" %x30-35          ; 250-255
-	if addr, err := netip.ParseAddr(unescapedHost); err == nil {
-		if !addr.Is4() {
-			return errorsJoin(
-				ErrInvalidHostAddress,
-				fmt.Errorf("a host as an address, without square brackets, should refer to an IPv4 address: %q", host),
-			)
+			return ipType{isIPv6: true, isIPvFuture: true}, nil
 		}
 
-		return nil
+		return ipType{isIPv6: true}, validateIPv6(host)
+	}
+
+	if err := validateIPv4(host); err == nil {
+		return ipType{isIPv4: true}, nil
 	}
 
 	// this is not an IP, check for host DNS or registered name
-	if err := validateHostForScheme(host, unescapedHost, schemes...); err != nil {
-		return errorsJoin(
+	//
+	// TODO: since this is not escaped, check the validity of the escape sequence
+	if err := validateHostForScheme(host, schemes...); err != nil {
+		return ipType{}, errorsJoin(
 			ErrInvalidHost,
 			err,
 		)
 	}
 
-	return nil
-}
-
-func validateIPv6(unescapedHost string) error {
-	// address the provision made in the RFC for a "IPvFuture"
-	if unescapedHost[0] == 'v' || unescapedHost[0] == 'V' {
-		if err := validateIPvFuture(unescapedHost[1:]); err != nil {
-			return errorsJoin(
-				ErrInvalidHostAddress,
-				err,
-			)
-		}
-
-		return nil
-	}
-
-	// check for IPv6 address
-	// IPv6 may contain percent-encoded escaped characters
-	addr, err := netip.ParseAddr(unescapedHost)
-	if err != nil {
-		// RFC3986 stipulates that only IPv6 addresses are within square brackets
-		return errorsJoin(
-			ErrInvalidHostAddress,
-			fmt.Errorf("a square-bracketed host part should be a valid IPv6 address: %q", unescapedHost),
-		)
-	}
-
-	if !addr.Is6() {
-		return errorsJoin(
-			ErrInvalidHostAddress,
-			fmt.Errorf("a square-bracketed host part should not contain an IPv4 address: %q", unescapedHost),
-		)
-	}
-
-	return nil
+	return ipType{}, nil
 }
 
 // validateHostForScheme validates the host according to 2 different sets of rules:
@@ -720,10 +652,10 @@ func validateIPv6(unescapedHost string) error {
 //
 // dns-name see: https://www.rfc-editor.org/rfc/rfc1034, https://www.rfc-editor.org/info/rfc5890
 // reg-name    = *( unreserved / pct-encoded / sub-delims )
-func validateHostForScheme(host, unescapedHost string, schemes ...string) error {
+func validateHostForScheme(host string, schemes ...string) error {
 	for _, scheme := range schemes {
 		if UsesDNSHostValidation(scheme) {
-			if err := validateDNSHostForScheme(unescapedHost); err != nil {
+			if err := validateDNSHostForScheme(host); err != nil {
 				return err
 			}
 		}
@@ -736,7 +668,15 @@ func validateHostForScheme(host, unescapedHost string, schemes ...string) error 
 	return nil
 }
 
-func validateDNSHostForScheme(unescapedHost string) error {
+func validateDNSHostForScheme(host string) error {
+	unescapedHost, err := url.PathUnescape(host)
+	if err != nil {
+		return errorsJoin(
+			ErrInvalidDNSName,
+			fmt.Errorf("invalid host percent-escape sequence: %w", err),
+		)
+	}
+
 	// DNS name
 	if len(unescapedHost) > 255 {
 		// warning: size in bytes, not in runes (existing bug, or is it really?) -- TODO(fredbi)
@@ -771,11 +711,9 @@ func validateDNSHostForScheme(unescapedHost string) error {
 		previousPos = pos + 1
 	}
 
-	if previousPos <= len(unescapedHost) { // trailing separator: empty last segment. It matters here
-		return validateHostSegment(unescapedHost[previousPos:])
-	}
-
-	return nil
+	// previousPos necessarily <= len(unescapedHost)
+	// possible trailing separator: empty last segment. It matters here
+	return validateHostSegment(unescapedHost[previousPos:])
 }
 
 func validateRegisteredHostForScheme(host string) error {
@@ -973,9 +911,9 @@ func parseAuthority(hier string) (authorityInfo, error) {
 		prefix:   prefix,
 		userinfo: userinfo,
 		host:     host,
-		isIPv6:   isIPv6,
 		port:     port,
 		path:     path,
+		ipType:   ipType{isIPv6: isIPv6},
 	}, nil
 }
 

@@ -3,6 +3,8 @@ package uri
 import (
 	"errors"
 	"fmt"
+	"net/netip"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -206,8 +208,6 @@ func testLoop(generator testGenerator) func(t *testing.T) {
 			t.Run(testName, func(t *testing.T) {
 				t.Parallel()
 
-				assertIsURI(t, test.uriRaw, test.err != nil, test.isReference)
-
 				// parse string as a pure URI
 				actual, err := Parse(test.uriRaw)
 
@@ -247,9 +247,26 @@ func testLoop(generator testGenerator) func(t *testing.T) {
 					test.asserter(t, actual)
 				}
 
+				assertIsURI(t, test.uriRaw, test.err != nil, test.isReference)
+
 				if test.uri != nil {
 					// we want to assert struct in-depth, otherwise no error is good enough
 					assertURI(t, test.uriRaw, test.uri, actual)
+				}
+
+				// for host provided as an IP address
+				auth := actual.Authority()
+				if auth.IsIP() {
+					addr := auth.IPAddr()
+					require.NotEmpty(t, addr)
+
+					host := auth.Host()
+					unescapedHost, _ := url.PathUnescape(host)
+
+					stdIP, err := netip.ParseAddr(unescapedHost)
+					require.NoError(t, err)
+
+					require.Equal(t, stdIP.String(), addr.String())
 				}
 			})
 		}

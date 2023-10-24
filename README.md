@@ -140,6 +140,7 @@ The librarian's corner (still WIP).
 | Representing IPv6 Zone Identifiers| [RFC6874](https://www.rfc-editor.org/rfc/rfc6874.txt) |      | |
 | https://tools.ietf.org/html/rfc6874         | ||
 | https://www.rfc-editor.org/rfc/rfc3513      | ||
+| |[URL WhatWG Living Standard](https://url.spec.whatwg.org/) ||
 
 (1) Deviations from the RFC:
 * Tokens: ALPHAs are tolerated to be Unicode Letter codepoints, DIGITs are tolerated to be Unicode Digit codepoints.
